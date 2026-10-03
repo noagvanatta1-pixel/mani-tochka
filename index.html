@@ -470,7 +470,7 @@ function vAn(){
 }
 
 function accountCard(){
-  if (!ONLINE) return '<div class="card set"><label style="margin-top:0">Режим без аккаунта</label><div class="hi" style="margin:0 4px">Данные хранятся только на этом устройстве. Откройте приложение через Telegram, чтобы они сохранялись в облаке.</div></div>';
+  if (!ONLINE) return '<div class="card set"><label style="margin-top:0">Режим без аккаунта</label><div class="hi" style="margin:0 4px">Данные хранятся только на этом устройстве.</div></div>';
   var st = syncState === 'ok' ? '☁️ Данные сохраняются на сервере' : (syncState === 'offline' ? '⚠️ Нет связи с сервером — сохраню, как только появится' : 'Подключаюсь…');
   return '<div class="card set"><label style="margin-top:0">Аккаунт</label><div class="hi" style="margin:0 4px 14px"><b style="color:var(--ink)">'+esc(tgUser.first_name || 'Вы')+'</b><br>'+st+'</div>' +
     (BOT ? '<button class="btn ghost" data-act="invite">'+ic('plus',22)+' Позвать друзей</button>' : '') +
@@ -728,6 +728,7 @@ function boot(){
   $('#nav').style.display = 'none'; $('#fab').style.display = 'none';
   $('#app').innerHTML = '<div class="empty" style="padding-top:38vh;font-size:18px">Загрузка…</div>';
   api('GET', '/api/state').then(function(r){
+    if (typeof r.rev !== 'number') { var nb = new Error('no backend'); nb.status = 404; throw nb; }
     BOT = r.bot || '';
     if (r.state) { S = normalize(r.state); rev = r.rev; cacheLocal(); }
     else {
@@ -737,6 +738,9 @@ function boot(){
     }
     syncState = 'ok';
   }).catch(function(e){
+    if (e.status === 404 || e.status === 405) {   // сервера нет (например, GitHub Pages): храним данные на телефоне
+      ONLINE = false; syncState = 'local'; S = normalize(S); return;
+    }
     if (e.status === 401) {
       blocked = true;
       $('#app').innerHTML = '<div class="card empty">Не удалось войти. Закройте приложение и откройте его заново через бота в Telegram.</div>';
