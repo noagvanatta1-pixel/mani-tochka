@@ -1,0 +1,13 @@
+{
+  "name": "mani-tochka",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Мани.точка — Telegram Mini App для учёта расходов и накоплений",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}
