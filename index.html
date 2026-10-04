@@ -216,6 +216,12 @@ body{font-weight:500}
 .plan .ico{width:3.25rem;height:3.25rem}
 .edit{width:2.5rem;height:2.5rem}
 .mnav button{border-radius:.75rem}
+.mnav button:disabled{opacity:.3;pointer-events:none}
+.mlist{display:flex;flex-direction:column;gap:.5rem}
+.mrow{display:flex;justify-content:space-between;align-items:center;padding:.9rem 1rem;border-radius:.9rem;background:var(--pink-l);color:var(--ink,inherit);font-weight:600;text-align:left}
+.mrow.on{outline:2px solid var(--pink-d)}
+.mrow b{font-weight:700;opacity:.8}
+.top .title[data-act=mpick]{cursor:pointer}
 /* иконки категорий */
 .ci{display:inline-flex;align-items:center;justify-content:center;flex:none;width:2.5rem;height:2.5rem;border-radius:.8125rem;background:var(--pink-l);color:var(--pink-d);vertical-align:middle}
 .ci.sm{width:1.5rem;height:1.5rem;border-radius:.5rem}
@@ -576,10 +582,27 @@ function confirmBox(msg, cb){
 /* ---------- Views ---------- */
 function monthHeader(withHi){
   return '<div class="top"><div>' + (withHi ? '<div class="hi">' + (scope === 'fam' ? 'Семейный бюджет' : 'Привет' + (userName() ? ', ' + esc(userName()) : '')) + '</div>' : '<div class="hi">Месяц</div>') +
-    '<div class="title">' + MONTHS[VM.m] + ' ' + VM.y + '</div></div>' +
-    '<div class="mnav"><button data-act="mprev" aria-label="Предыдущий месяц">‹</button><button data-act="mnext" aria-label="Следующий месяц">›</button></div></div>';
+    '<div class="title" data-act="mpick">' + MONTHS[VM.m] + ' ' + VM.y + (monthKeys().length > 1 ? ' ▾' : '') + '</div></div>' +
+    mnavHtml() + '</div>';
 }
 
+function monthBounds(){
+  var rk = realKey(), lo = rk, hi = rk;
+  function see(d){ if (!d) return; var k = String(d).slice(0,7); if (!/^\d{4}-\d{2}$/.test(k)) return; if (k < lo) lo = k; if (k > hi) hi = k; }
+  S.ops.forEach(function(o){ see(o.date); });
+  S.goals.forEach(function(g){ g.contribs.forEach(function(c){ see(c.date); }); });
+  return {lo: lo, hi: hi};
+}
+function mnavHtml(){
+  var b = monthBounds(), k = curKey();
+  var many = b.lo < b.hi;
+  return '<div class="mnav"><button data-act="mprev"' + (k <= b.lo ? ' disabled' : '') + ' aria-label="Предыдущий месяц">‹</button><button data-act="mnext"' + (k >= b.hi ? ' disabled' : '') + ' aria-label="Следующий месяц">›</button></div>';
+}
+function monthKeys(){
+  var b = monthBounds(), out = [], p = b.hi.split('-'), y = +p[0], m = +p[1] - 1;
+  while (mk(y, m) >= b.lo && out.length < 120) { out.push({y: y, m: m}); m--; if (m < 0) { m = 11; y--; } }
+  return out;
+}
 function realKey(){ var n = new Date(); return mk(n.getFullYear(), n.getMonth()); }
 function monthsSince(iso){
   var p = String(iso || today()).split('-'), n = new Date();
@@ -670,7 +693,7 @@ function vHome(){
 
 function vStats(){
   var k = curKey(), sp = spentOf(k), lim = sum(S.cats.map(function(c){ return c.limit; })), left = lim - sp, over = sp > lim && lim > 0;
-  var h = '<div class="top"><div><div class="title">Статистика</div><div class="hi">'+MONTHS[VM.m]+' '+VM.y+'</div></div><div class="mnav"><button data-act="mprev">‹</button><button data-act="mnext">›</button></div></div>';
+  var h = '<div class="top"><div><div class="title">Статистика</div><div class="hi" data-act="mpick">'+MONTHS[VM.m]+' '+VM.y+(monthKeys().length > 1 ? ' ▾' : '')+'</div></div>' + mnavHtml() + '</div>';
   h += '<div class="card budget"><div class="hi">Бюджет месяца</div><div class="n">'+fmt(sp)+' <small>/ '+fmt(lim)+'</small></div>' +
     '<div class="bar '+(over ? 'over' : '')+'"><i style="width:'+(lim > 0 ? Math.min(100, sp/lim*100) : (sp > 0 ? 100 : 0))+'%"></i></div>' +
     '<div class="ok '+(over ? 'neg' : '')+'" style="margin:0 0.375rem">'+(over ? 'Превышение · '+fmt(-left) : 'В рамках бюджета · осталось '+fmt(left))+'</div></div>';
@@ -776,7 +799,7 @@ function vAn(){
   var passed = dl != null ? d - dl + 1 : (isPast() ? d : 0);
   var avg = passed > 0 ? sp / passed : 0;
   var forecast = (dl != null && passed > 0) ? avg * d : null;
-  var h = '<div class="top"><div><div class="title">Аналитика</div><div class="hi">'+MONTHS[VM.m]+' '+VM.y+'</div></div><div class="mnav"><button data-act="mprev">‹</button><button data-act="mnext">›</button></div></div>';
+  var h = '<div class="top"><div><div class="title">Аналитика</div><div class="hi" data-act="mpick">'+MONTHS[VM.m]+' '+VM.y+(monthKeys().length > 1 ? ' ▾' : '')+'</div></div>' + mnavHtml() + '</div>';
   h += '<div class="kpis"><div class="kpi"><span>Потрачено</span><b>'+fmt(sp)+'</b></div><div class="kpi"><span>В среднем в день</span><b>'+fmt(avg)+'</b></div>' +
     '<div class="kpi w"><span>'+(forecast != null ? 'Прогноз трат до конца месяца' : 'Накоплено в целях за месяц')+'</span><b>'+fmt(forecast != null ? forecast : contribOf(k))+'</b></div></div>';
   var ins = insights(k, sp, forecast);
@@ -931,8 +954,16 @@ function updContrib(){
 
 /* ---------- Actions ---------- */
 var ACT = {
-  mprev: function(){ VM.m--; if (VM.m < 0) { VM.m = 11; VM.y--; } render(); },
-  mnext: function(){ VM.m++; if (VM.m > 11) { VM.m = 0; VM.y++; } render(); },
+  mprev: function(){ var b = monthBounds(); if (curKey() <= b.lo) return; VM.m--; if (VM.m < 0) { VM.m = 11; VM.y--; } render(); },
+  mnext: function(){ var b = monthBounds(); if (curKey() >= b.hi) return; VM.m++; if (VM.m > 11) { VM.m = 0; VM.y++; } render(); },
+  mpick: function(el){
+    var ks = monthKeys(); if (ks.length < 2) return;
+    sheet('<h3>Выберите месяц</h3><div class="mlist">' + ks.map(function(x){
+      var k = mk(x.y, x.m);
+      return '<button class="mrow' + (k === curKey() ? ' on' : '') + '" data-act="mgo" data-y="' + x.y + '" data-m="' + x.m + '"><span>' + MONTHS[x.m] + ' ' + x.y + '</span><b>' + fmt(spentOf(k)) + '</b></button>';
+    }).join('') + '</div>');
+  },
+  mgo: function(d){ VM.y = +d.y; VM.m = +d.m; closeSheet(); render(); },
   addop: openOp,
   plan: openPlan,
   newcat: function(){ openCat(); },
