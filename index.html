@@ -22,6 +22,12 @@ html[data-theme=mint]{--bg:#ecf3f0;--ink:#0e2a26;--muted:#617a74;--pink:#4fb59d;
 html[data-theme=lav]{--bg:#f2eff7;--ink:#241a3a;--muted:#7a7092;--pink:#a58be0;--pink-d:#6b3fd1;--pink-l:#e8e0f8;--sh:36,26,58;--btn:#6b3fd1;--bal1:#7a4fe0;--bal2:#5a2fb8;--bar1:#a58be0;--line:#e5def2;--grab:#d3c9e8;--toast:#241a3a}
 html[data-theme=sky]{--bg:#eaf3f8;--ink:#0d2a3b;--muted:#5f7c8d;--pink:#4fb0d8;--pink-d:#0c7fae;--pink-l:#d6ecf6;--sh:13,42,59;--btn:#0c7fae;--bal1:#1493c4;--bal2:#0a6a93;--bar1:#4fb0d8;--line:#d9e8f0;--grab:#c1d7e3;--toast:#0d2a3b}
 html[data-theme=dark]{--bg:#0d1226;--card:#161d38;--ink:#eef0fb;--muted:#8f98bd;--pink:#7d8cff;--pink-d:#98a5ff;--pink-l:#1f2849;--sh:0,0,0;--btn:#4a5eff;--bal1:#3347f0;--bal2:#1b2aa8;--bar1:#7d8cff;--dangerbg:#3a1f2b;--line:#242d50;--grab:#3a4472;--toast:#2a3460;--green:#2fc596;--red:#ff7a80}
+html[data-theme=gra]{--bg:#111214;--card:#1b1c20;--ink:#f0f0f2;--muted:#9a9ca6;--pink:#c9a24a;--pink-d:#ffc24d;--pink-l:#26272d;--sh:0,0,0;--btn:#d98e0b;--bal1:#4a4d57;--bal2:#2c2e36;--bar1:#c9a24a;--dangerbg:#3a1f2b;--line:#2a2b31;--grab:#44464f;--toast:#2b2d34;--green:#2fc596;--red:#ff7a80}
+html[data-theme=emd]{--bg:#07140e;--card:#0f2218;--ink:#e9f6ef;--muted:#86a799;--pink:#3fc08f;--pink-d:#4fd9a2;--pink-l:#173325;--sh:0,0,0;--btn:#14936a;--bal1:#17936a;--bal2:#0b5f44;--bar1:#3fc08f;--dangerbg:#3a1f2b;--line:#1b3528;--grab:#2c5440;--toast:#1c3a2c;--green:#2fc596;--red:#ff7a80}
+html[data-theme=win]{--bg:#180c13;--card:#27141f;--ink:#fbeef3;--muted:#b392a1;--pink:#e0668f;--pink-d:#ff8fb2;--pink-l:#3a1c2b;--sh:0,0,0;--btn:#c23567;--bal1:#b22d5d;--bal2:#7a1a3f;--bar1:#e0668f;--dangerbg:#3a1f2b;--line:#3a1e2c;--grab:#5d3347;--toast:#42202f;--green:#2fc596;--red:#ff7a80}
+html[data-theme=oce]{--bg:#061520;--card:#0e2433;--ink:#e8f4fb;--muted:#86a6ba;--pink:#3fb0e4;--pink-d:#5cc8f5;--pink-l:#143549;--sh:0,0,0;--btn:#1580b3;--bal1:#1a8cc2;--bal2:#0b5d86;--bar1:#3fb0e4;--dangerbg:#3a1f2b;--line:#173649;--grab:#2c566f;--toast:#183a50;--green:#2fc596;--red:#ff7a80}
+html[data-theme=vio]{--bg:#120d22;--card:#1e1638;--ink:#f1ecff;--muted:#9d93be;--pink:#a284f7;--pink-d:#b9a1ff;--pink-l:#2b2150;--sh:0,0,0;--btn:#7c4ff0;--bal1:#7447e6;--bal2:#4b27ad;--bar1:#a284f7;--dangerbg:#3a1f2b;--line:#2a2150;--grab:#453a78;--toast:#2d2358;--green:#2fc596;--red:#ff7a80}
+html[data-theme=emb]{--bg:#170e09;--card:#26160e;--ink:#fcf0e8;--muted:#b39784;--pink:#ec7a3c;--pink-d:#ff9a60;--pink-l:#3a2216;--sh:0,0,0;--btn:#d05a1c;--bal1:#c4531a;--bal2:#8a3510;--bar1:#ec7a3c;--dangerbg:#3a1f2b;--line:#3a2318;--grab:#5c3d2b;--toast:#432818;--green:#2fc596;--red:#ff7a80}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%;font-size:13.76px}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'Nunito',system-ui,-apple-system,'Segoe UI',sans-serif}
@@ -124,6 +130,7 @@ input.f:focus,.panel input:focus{border-color:var(--pink)}
 .nav button .i{width:3.25rem;height:2.25rem;border-radius:1.125rem;display:flex;align-items:center;justify-content:center}
 .nav button.on{color:var(--pink-d)}.nav button.on .i{background:var(--pink-l)}
 .fab{position:fixed;right:1.25rem;bottom:calc(var(--nav) + env(safe-area-inset-bottom) + 1.125rem);width:3.75rem;height:3.75rem;border-radius:50%;background:var(--fab);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 0.625rem 1.5rem rgba(var(--sh),.4);z-index:15}
+.fab{transition:opacity .2s,transform .1s}
 .fab:active{transform:scale(.94)}
 #sheet{position:fixed;left:0;right:0;top:0;bottom:0;z-index:50;pointer-events:none}
 #sheet .back{position:absolute;inset:0;background:rgba(20,10,16,.45);opacity:0;transition:opacity .25s}
@@ -381,7 +388,13 @@ var THEMES = {
   mint:{n:'Хвоя',bg:'#ecf3f0',a:'#4fb59d',b:'#0f7d68'},
   lav:{n:'Слива',bg:'#f2eff7',a:'#a58be0',b:'#6b3fd1'},
   sky:{n:'Лагуна',bg:'#eaf3f8',a:'#4fb0d8',b:'#0c7fae'},
-  dark:{n:'Ночь',bg:'#0d1226',a:'#7d8cff',b:'#1b2aa8'}
+  dark:{n:'Ночь',bg:'#0d1226',a:'#7d8cff',b:'#1b2aa8'},
+  gra:{n:'Графит',bg:'#111214',a:'#c9a24a',b:'#2c2e36'},
+  emd:{n:'Изумруд',bg:'#07140e',a:'#3fc08f',b:'#0b5f44'},
+  win:{n:'Бордо',bg:'#180c13',a:'#e0668f',b:'#7a1a3f'},
+  oce:{n:'Океан',bg:'#061520',a:'#3fb0e4',b:'#0b5d86'},
+  vio:{n:'Ультрафиолет',bg:'#120d22',a:'#a284f7',b:'#4b27ad'},
+  emb:{n:'Янтарь',bg:'#170e09',a:'#ec7a3c',b:'#8a3510'}
 };
 var SCALES = {s:{n:'Мельче',k:0.78}, m:{n:'Обычный',k:0.86}, l:{n:'Крупнее',k:1}};
 function applyTheme(){
@@ -1039,6 +1052,7 @@ $('#file').addEventListener('change', function(e){
 });
 
 $('#fab').innerHTML = ic('plus', 34);
+(function(){ var t; window.addEventListener('scroll', function(){ var f = $('#fab'); f.style.opacity = '.0'; f.style.pointerEvents = 'none'; clearTimeout(t); t = setTimeout(function(){ f.style.opacity = ''; f.style.pointerEvents = ''; }, 350); }, {passive: true}); })();
 
 
 /* ---------- Семья, регулярные платежи, напоминания, экспорт ---------- */
