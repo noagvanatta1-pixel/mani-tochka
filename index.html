@@ -523,7 +523,7 @@ function vSet(){
     '<button class="btn big" data-act="savesettings">Сохранить</button></div>' +
     accountCard() +
     '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button></div>' +
-    '<div class="ver">Копилка · данные хранятся на этом устройстве</div>';
+    '<div class="ver">Копилка · ' + (ONLINE ? 'данные синхронизируются с сервером' : 'данные хранятся на этом устройстве') + '</div>';
 }
 
 function render(){
