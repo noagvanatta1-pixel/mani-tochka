@@ -115,6 +115,7 @@ const q = {
   setCode: db.prepare('UPDATE families SET code = ? WHERE id = ?'),
   delFam: db.prepare('DELETE FROM families WHERE id = ?'),
   premiumOf: db.prepare('SELECT until FROM premium WHERE user_id = ?'),
+  lastPay: db.prepare('SELECT MAX(created_at) AS t FROM payments WHERE user_id = ?'),
   ykIns: db.prepare('INSERT INTO yk_pay (id, user_id, plan, amount, status, created_at) VALUES (?, ?, ?, ?, \'pending\', ?)'),
   ykGet: db.prepare('SELECT * FROM yk_pay WHERE id = ?'),
   ykSet: db.prepare('UPDATE yk_pay SET status = ? WHERE id = ?'),
@@ -354,7 +355,7 @@ function planInfo(uid) {
   const k = (100 - disc) / 100;
   return {
     status, until, daysLeft: Math.max(0, Math.ceil((until - now) / DAY)),
-    locked: status === 'free', paywall: PAYWALL,
+    locked: status === 'free', paywall: PAYWALL, lastPaid: (q.lastPay.get(uid) || {}).t || 0,
     priceMonth: Math.round(PRICE_MONTH * k), priceYear: Math.round(PRICE_YEAR * k), priceLife: Math.round(PRICE_LIFE * k),
     fullMonth: PRICE_MONTH, fullYear: PRICE_YEAR, fullLife: PRICE_LIFE, discount: disc,
     pay: PAY_URL ? PAY_URL.replace('{uid}', String(uid)) : '', support: SUPPORT_TG,

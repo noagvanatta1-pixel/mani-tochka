@@ -1572,16 +1572,36 @@ function priceBtns(){
     '<button class="btn" data-act="pay" data-v="year" style="margin-bottom:.5rem">Год — ' + fmt(y) + old(y, PLAN.fullYear) + (save > 0 ? ' · выгоднее на ' + save + '%' : '') + '</button>' +
     '<button class="btn ghost" data-act="pay" data-v="month">Месяц — ' + fmt(m) + old(m, PLAN.fullMonth) + '</button>';
 }
+var PAY_BASE = 0;
+function thanksSheet(){
+  var until = PLAN && PLAN.until;
+  var line = until > 4000000000000 ? 'Подписка активна навсегда.' : (until ? 'Подписка активна до ' + dmy(until) + '.' : 'Подписка активна.');
+  try { if (PLAN && PLAN.lastPaid) localStorage.setItem('thx', String(PLAN.lastPaid)); } catch (e) {}
+  sheet('<h3>Оплата прошла</h3>' +
+    '<div style="text-align:center;padding:1.2rem .5rem .6rem"><div style="font-size:3.4rem;line-height:1">🎉</div>' +
+    '<div style="font-size:1.5rem;font-weight:800;margin-top:.7rem">Спасибо!</div>' +
+    '<div class="hi" style="margin:.5rem 0 0;font-size:1rem;font-weight:600">' + line + '<br>Все функции Копилки открыты.</div></div>' +
+    '<button class="btn big" data-close>Отлично</button>');
+}
+function maybeThanks(){
+  try {
+    if (!PLAN || PLAN.status !== 'premium' || !PLAN.lastPaid) return;
+    if (Date.now() - PLAN.lastPaid > 15 * 60000) return;
+    if (localStorage.getItem('thx') === String(PLAN.lastPaid)) return;
+    thanksSheet();
+  } catch (e) {}
+}
 function refreshPlan(tries, quiet){
   api('GET', '/api/plan').then(function(r){
     PLAN = r;
-    if (r.status === 'premium') { PAY_WAIT = false; closeSheet(); render(); toast('Подписка активна. Спасибо!'); }
+    if (r.status === 'premium' && (r.lastPaid || 0) > PAY_BASE) { PAY_WAIT = false; closeSheet(); render(); thanksSheet(); }
     else if (tries > 0) setTimeout(function(){ refreshPlan(tries - 1, quiet); }, quiet ? 3000 : 1500);
     else if (!quiet) toast('Оплата принята, подписка включится через минуту');
   }).catch(function(){});
 }
 var PAY_WAIT = false;
 function payInvoice(plan, method){
+  PAY_BASE = (PLAN && PLAN.lastPaid) || 0;
   if (method === 'sbp') {
     api('POST', '/api/pay/sbp', {plan: plan}).then(function(r){
       PAY_WAIT = true;
@@ -1782,7 +1802,7 @@ function loadExtras(){
   if (!ONLINE) return;
   loadFamInfo().then(function(){ if (TAB === 'prof' || TAB === 'set' || TAB === 'home') render(); }).catch(function(){});
   api('GET', '/api/prefs').then(function(r){ PREFS = {remind: !!r.remind, weekly: !!r.weekly, bills: !!r.bills, monthly: !!r.monthly, hour: r.hour || 20}; if (TAB === 'set') render(); }).catch(function(){});
-  api('GET', '/api/plan').then(function(r){ PLAN = r; if (TAB === 'prof' || TAB === 'set' || TAB === 'home') render(); }).catch(function(){});
+  api('GET', '/api/plan').then(function(r){ PLAN = r; if (TAB === 'prof' || TAB === 'set' || TAB === 'home') render(); maybeThanks(); }).catch(function(){});
   api('GET', '/api/rates').then(function(r){ if (r && r.rates) { RATES = r.rates; if ($('#f-fx')) updFx(); } }).catch(function(){});
   api('GET', '/api/ref').then(function(r){ REF = r; if (TAB === 'prof') render(); }).catch(function(){});
 }
