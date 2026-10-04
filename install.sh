@@ -54,6 +54,9 @@ else
   sed -i "s#^APP_URL=.*#APP_URL=https://$DOMAIN#" "$ENV_FILE"
   grep -q '^BOT_USERNAME=' "$ENV_FILE" || echo "BOT_USERNAME=TheSavedMoney_bot" >> "$ENV_FILE"
 fi
+# поддержка и секрет для уведомлений об оплате (добавляются один раз)
+grep -q '^SUPPORT_TG=' "$ENV_FILE" || echo "SUPPORT_TG=Noagvanatta1" >> "$ENV_FILE"
+grep -q '^PAY_SECRET=' "$ENV_FILE" || echo "PAY_SECRET=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> "$ENV_FILE"
 
 echo "==> Служба"
 cat > /etc/systemd/system/mani.service <<'SVC'

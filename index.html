@@ -278,6 +278,18 @@ input.f,.panel input{border-radius:.875rem;border-width:1.5px;border-color:var(-
 .plan.slim b{font-size:.9375rem;font-weight:600;flex:1}
 .plan.slim span{font-size:1.25rem;color:var(--muted)}
 .sec{margin-top:1.125rem}
+
+.trialbar{margin:-.5rem 0 .75rem;padding:.625rem .875rem;border-radius:.875rem;background:var(--pink-l);color:var(--pink-d);font-weight:600;font-size:.875rem;cursor:pointer}
+.trialbar b{font-weight:800}
+.quick{margin:.5rem 0 .25rem;flex-wrap:nowrap;overflow-x:auto;padding-bottom:.25rem;-webkit-overflow-scrolling:touch}
+.quick .chip{flex:none;white-space:nowrap}
+.tips{padding:.5rem .875rem}
+.tip{display:flex;gap:.625rem;align-items:flex-start;padding:.5rem 0;font-weight:600;font-size:.9375rem;line-height:1.35}
+.tip+.tip{border-top:1px solid var(--line)}
+.tip.warn{color:var(--red)}
+.tip .ci.sm{margin-top:.125rem}
+.gfore{margin:-.25rem .375rem .875rem;font-size:.8125rem;font-weight:600;color:var(--muted)}
+.shareimg{width:100%;border-radius:1rem;display:block;margin-top:.5rem}
 </style>
 </head>
 <body>
@@ -585,6 +597,17 @@ function plan(g){
   var r = calcPlan(rest, left, baseIncome(realKey()));
   r.left = left; return r;
 }
+/* прогноз по цели: когда накопим при нынешнем темпе */
+function goalForecast(g){
+  var left = g.target - saved(g);
+  if (left <= 0 || !g.contribs.length) return '';
+  var first = g.contribs.reduce(function(m, c){ return c.date < m ? c.date : m; }, g.contribs[0].date).split('-');
+  var now = new Date(), months = Math.max(1, (now.getFullYear() - +first[0]) * 12 + now.getMonth() - (+first[1] - 1) + 1);
+  var per = saved(g) / months; if (per <= 0) return '';
+  var n = Math.ceil(left / per), d = new Date(now.getFullYear(), now.getMonth() + n, 1);
+  if (n > 120) return '';
+  return '<div class="gfore">При вашем темпе (≈ '+fmt(per)+'/мес) накопите к '+MSHORT[d.getMonth()]+' '+d.getFullYear()+'</div>';
+}
 function planLine(g){
   var p = plan(g);
   if (!p) return '<div class="gplan hint" data-act="editgoal" data-id="'+g.id+'">Укажите срок — подскажу, сколько откладывать в месяц</div>';
@@ -609,7 +632,7 @@ function goalCard(g, manage){
     '<button class="ib cam" data-act="photo" data-id="'+g.id+'" aria-label="Фото">'+ic('camera',22)+'</button>') : '';
   return '<div class="card"><div class="gimg">'+img+(isMain ? '<span class="badge">Основная</span>' : '')+tools+'</div>' +
     '<div class="grow"><div class="gname" data-act="editgoal" data-id="'+g.id+'">'+esc(g.name)+'</div><span class="pill">'+p+'%</span></div>' +
-    '<div class="gsum"><b>'+fmt(s)+'</b> из '+fmt(g.target)+'</div>' + planLine(g) +
+    '<div class="gsum"><b>'+fmt(s)+'</b> из '+fmt(g.target)+'</div>' + planLine(g) + goalForecast(g) +
     '<div class="bar"><i style="width:'+p+'%"></i></div>' +
     '<button class="btn" data-act="contrib" data-id="'+g.id+'">'+ic('plus',22)+' Добавить</button></div>';
 }
@@ -633,7 +656,7 @@ function goalMini(g){
 }
 
 function vHome(){
-  var k = curKey(), h = monthHeader(true);
+  var k = curKey(), h = monthHeader(true) + trialBar();
   var g = goalById(S.mainGoal) || S.goals[0];
   h += '<div class="bal"><div class="lbl">Осталось в этом месяце</div><div class="big">'+fmt(leftOf(k))+'</div>' +
     '<div class="row"><div class="mini"><span>Доход</span><b>'+fmt(incomeOf(k))+'</b></div><div class="mini"><span>Потрачено</span><b>'+fmt(spentOf(k))+'</b></div></div></div>';
@@ -677,6 +700,77 @@ function vGoals(){
   return h + '<button class="btn ghost" data-act="newgoal">'+ic('plus',22)+' Новая цель</button>';
 }
 
+/* карточка итогов для сторис: рисуем на canvas */
+function cssv(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function drawShare(){
+  var W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  var c = cv.getContext('2d'), k = curKey(), sp = spentOf(k), inc = incomeOf(k);
+  var fd = "'Unbounded','Onest',system-ui,sans-serif", fb = "'Onest',system-ui,sans-serif";
+  var g = c.createLinearGradient(0, 0, W, H); g.addColorStop(0, cssv('--bal1') || '#3a50ff'); g.addColorStop(1, cssv('--bal2') || '#2236d6');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  // монета с рифлёным краем
+  var cx = 860, cy = 250, i;
+  c.save(); c.translate(cx, cy); c.strokeStyle = 'rgba(255,255,255,.22)'; c.lineWidth = 6;
+  for (i = 0; i < 90; i++) { c.rotate(Math.PI * 2 / 90); c.beginPath(); c.moveTo(0, -250); c.lineTo(0, -222); c.stroke(); } c.restore();
+  c.fillStyle = '#ffc83d'; c.beginPath(); c.arc(cx, cy, 130, 0, 7); c.fill();
+  c.strokeStyle = 'rgba(255,255,255,.4)'; c.lineWidth = 10; c.beginPath(); c.arc(cx, cy, 120, 0, 7); c.stroke();
+  c.fillStyle = '#3b2a00'; c.font = '600 130px ' + fd; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('₽', cx, cy + 6);
+  c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.fillStyle = '#fff';
+  c.font = '500 44px ' + fb; c.globalAlpha = .85; c.fillText('Итоги месяца', 70, 120); c.globalAlpha = 1;
+  c.font = '600 84px ' + fd; c.fillText(MONTHS[VM.m], 70, 215);
+  var left = inc - sp - contribOf(k);
+  c.font = '500 40px ' + fb; c.globalAlpha = .85; c.fillText(left >= 0 ? 'Осталось' : 'Перерасход', 70, 440); c.globalAlpha = 1;
+  c.font = '600 120px ' + fd; c.fillText(fmt(Math.abs(left)), 70, 570);
+  var rows = S.cats.map(function(x){ return {c: x, s: sum(catOps(k, x.id).map(function(o){ return o.amount; }))}; }).filter(function(r){ return r.s > 0; }).sort(function(a, b){ return b.s - a.s; }).slice(0, 3);
+  var y = 700;
+  c.font = '600 40px ' + fb; c.fillText('Больше всего потратил на', 70, y); y += 40;
+  rows.forEach(function(r){
+    var p = sp > 0 ? r.s / sp : 0;
+    c.font = '600 44px ' + fb; c.fillStyle = '#fff'; c.fillText(r.c.name, 70, y + 56);
+    c.textAlign = 'right'; c.fillText(fmt(r.s), W - 70, y + 56); c.textAlign = 'left';
+    c.fillStyle = 'rgba(255,255,255,.2)'; c.fillRect(70, y + 78, W - 140, 16);
+    c.fillStyle = '#ffc83d'; c.fillRect(70, y + 78, Math.max(16, (W - 140) * p), 16);
+    y += 135;
+  });
+  var gl = S.goals.filter(function(x){ return saved(x) > 0; })[0];
+  if (gl) {
+    c.fillStyle = 'rgba(255,255,255,.16)'; c.fillRect(70, 1120, W - 140, 120);
+    c.fillStyle = '#fff'; c.font = '600 40px ' + fb; c.fillText('Коплю на «' + gl.name + '»', 100, 1175);
+    c.font = '600 40px ' + fd; c.textAlign = 'right'; c.fillText(pct(saved(gl), gl.target) + '%', W - 100, 1175); c.textAlign = 'left';
+    c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(100, 1205, W - 200, 14);
+    c.fillStyle = '#ffc83d'; c.fillRect(100, 1205, Math.max(14, (W - 200) * pct(saved(gl), gl.target) / 100), 14);
+  }
+  c.fillStyle = '#fff'; c.globalAlpha = .8; c.font = '500 36px ' + fb; c.fillText('Копилка' + (BOT ? ' · @' + BOT : ''), 70, 1300); c.globalAlpha = 1;
+  return cv;
+}
+function openShare(){
+  var go = function(){
+    var cv = drawShare(), url = cv.toDataURL('image/png');
+    sheet('<h3>Итоги месяца</h3><img class="shareimg" alt="Итоги месяца" src="'+url+'"><div class="hi" style="margin:.6rem .25rem 0;font-size:.85rem;font-weight:600">Удерживайте картинку, чтобы сохранить, или нажмите «Поделиться».</div><button class="btn big" data-act="doshare">Поделиться</button>');
+    window.__shareCv = cv;
+  };
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
+}
+/* подсказки по месяцу */
+function insights(k, sp, forecast){
+  var out = [], prevK = (function(){ var d = new Date(VM.y, VM.m - 1, 1); return mk(d.getFullYear(), d.getMonth()); })();
+  var rows = S.cats.map(function(c){
+    return {c: c, now: sum(catOps(k, c.id).map(function(o){ return o.amount; })), prev: sum(catOps(prevK, c.id).map(function(o){ return o.amount; }))};
+  });
+  if (sp > 0) {
+    var top = rows.slice().sort(function(a, b){ return b.now - a.now; })[0];
+    if (top && top.now > 0) out.push({i: 'pie', t: 'Больше всего уходит на «' + top.c.name + '»: ' + Math.round(top.now / sp * 100) + '% расходов'});
+  }
+  rows.filter(function(r){ return r.prev > 0 && r.now >= r.prev * 1.3 && r.now - r.prev >= 500; })
+    .sort(function(a, b){ return (b.now - b.prev) - (a.now - a.prev); }).slice(0, 1)
+    .forEach(function(r){ out.push({i: 'chart', t: '«' + r.c.name + '»: на ' + Math.round((r.now / r.prev - 1) * 100) + '% больше, чем в прошлом месяце', warn: 1}); });
+  var inc = incomeOf(k);
+  if (forecast != null && inc > 0) {
+    if (forecast > inc) out.push({i: 'chart', t: 'При таких темпах расходы превысят доход на ' + fmt(forecast - inc), warn: 1});
+    else out.push({i: 'wallet', t: 'К концу месяца останется примерно ' + fmt(inc - forecast)});
+  }
+  return out;
+}
 function vAn(){
   var k = curKey(), sp = spentOf(k), d = dim(), dl = daysLeft();
   var passed = dl != null ? d - dl + 1 : (isPast() ? d : 0);
@@ -685,6 +779,8 @@ function vAn(){
   var h = '<div class="top"><div><div class="title">Аналитика</div><div class="hi">'+MONTHS[VM.m]+' '+VM.y+'</div></div><div class="mnav"><button data-act="mprev">‹</button><button data-act="mnext">›</button></div></div>';
   h += '<div class="kpis"><div class="kpi"><span>Потрачено</span><b>'+fmt(sp)+'</b></div><div class="kpi"><span>В среднем в день</span><b>'+fmt(avg)+'</b></div>' +
     '<div class="kpi w"><span>'+(forecast != null ? 'Прогноз трат до конца месяца' : 'Накоплено в целях за месяц')+'</span><b>'+fmt(forecast != null ? forecast : contribOf(k))+'</b></div></div>';
+  var ins = insights(k, sp, forecast);
+  if (ins.length) h += '<div class="sec"><h2>Подсказки</h2></div><div class="card tips">' + ins.map(function(x){ return '<div class="tip '+(x.warn ? 'warn' : '')+'"><span class="ci sm">'+ic(x.i,14)+'</span><span>'+esc(x.t)+'</span></div>'; }).join('') + '</div>';
   var months = [], i;
   for (i = 5; i >= 0; i--) { var dt = new Date(VM.y, VM.m - i, 1), key = mk(dt.getFullYear(), dt.getMonth()); months.push({l: MSHORT[dt.getMonth()], inc: incomeOf(key), sp: spentOf(key)}); }
   var mx = Math.max(1, Math.max.apply(null, months.map(function(m){ return Math.max(m.inc, m.sp); })));
@@ -697,7 +793,9 @@ function vAn(){
     var p = Math.round(r.s / sp * 100);
     return '<div class="share"><div class="t"><span>'+ci(r.c.emoji,'sm')+' '+esc(r.c.name)+'</span><span>'+fmt(r.s)+' · '+p+'%</span></div><div class="bar"><i style="width:'+p+'%"></i></div></div>';
   }).join('') : '<div class="empty">Добавьте расходы, и здесь появится разбивка</div>';
-  return h + '</div>';
+  h += '</div>';
+  if (sp > 0 || contribOf(k) > 0) h += '<button class="btn ghost" data-act="sharecard" style="margin-top:.25rem">Поделиться итогами месяца</button>';
+  return h;
 }
 
 function accountCard(){
@@ -709,14 +807,14 @@ function accountCard(){
 }
 function vSet(){
   return '<div class="top"><div><div class="title">Настройки</div></div></div>' +
-    '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + Object.keys(THEMES).map(function(k){ var th = THEMES[k]; return '<button class="th '+((P().theme || 'pink') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join('') + '</div></div>' +
+    planCard() + '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + Object.keys(THEMES).map(function(k){ var th = THEMES[k]; return '<button class="th '+((P().theme || 'pink') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join('') + '</div></div>' +
     '<div class="card set"><label style="margin-top:0">Размер интерфейса</label><div class="seg">' + Object.keys(SCALES).map(function(k){ return '<button class="'+((P().scale || 'm') === k ? 'on' : '')+'" data-act="scale" data-v="'+k+'">'+SCALES[k].n+'</button>'; }).join('') + '</div></div>' +
     '<div class="card set">' +
     '<label>Ваше имя</label><input class="f" id="s-name" value="'+esc(P().name)+'" placeholder="'+esc(tgName || 'Как к вам обращаться')+'">' +
     '<label>Доход в месяц по умолчанию, ₽</label><input class="f" id="s-inc" inputmode="decimal" value="'+S.defaultIncome+'">' +
     '<button class="btn big" data-act="savesettings">Сохранить</button></div>' +
     familyCard() + refCard() + remindCard() + recurCard() + exportCard() +
-    accountCard() +
+    accountCard() + supportCard() +
     '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button></div>' +
     '<div class="ver">Копилка · ' + (ONLINE ? 'данные синхронизируются с сервером' : 'данные хранятся на этом устройстве') + '</div>';
 }
@@ -733,12 +831,24 @@ function render(){
 /* ---------- Sheets ---------- */
 var opType = 'expense', opCat = '', pendingGoal = null, editId = null, pickedEmoji = '';
 
+/* частые траты: нажал — сумма и категория подставились */
+function recentChips(){
+  var seen = {}, out = [];
+  S.ops.slice().sort(function(a, b){ return (b.t || 0) - (a.t || 0); }).forEach(function(o){
+    if (o.type !== 'expense' || out.length >= 5) return;
+    var key = o.catId + '|' + o.amount; if (seen[key] || !catById(o.catId)) return;
+    seen[key] = 1; out.push(o);
+  });
+  if (!out.length) return '';
+  return '<div class="chips quick" id="f-recent">' + out.map(function(o){ var c = catById(o.catId);
+    return '<button class="chip" data-act="opfill" data-cat="'+o.catId+'" data-amt="'+o.amount+'" data-note="'+esc(o.note || '')+'">'+ci(c.emoji,'sm')+' '+esc(o.note || c.name)+' · '+fmt(o.amount)+'</button>'; }).join('') + '</div>';
+}
 function openOp(){
   opType = 'expense'; opCat = S.cats[0] ? S.cats[0].id : '';
   var d = isCur() ? today() : mk(VM.y, VM.m) + '-01';
   sheet('<h3>Новая операция</h3>' +
     '<div class="seg"><button class="on" data-act="optype" data-v="expense">Расход</button><button data-act="optype" data-v="income">Доход</button></div>' +
-    '<div class="amtbox"><input id="f-amt" inputmode="decimal" placeholder="0" autocomplete="off"><span>₽</span></div>' +
+    '<div class="amtbox"><input id="f-amt" inputmode="decimal" placeholder="0" autocomplete="off"><span>₽</span></div>' + recentChips() +
     '<div id="f-cats"><label>Категория</label><div class="cgrid">' + S.cats.map(function(c){ return '<button class="cg '+(c.id === opCat ? 'on' : '')+'" data-act="opcat" data-id="'+c.id+'"><b>'+ci(c.emoji)+'</b>'+esc(c.name)+'</button>'; }).join('') + '</div></div>' +
     '<label>Комментарий</label><input id="f-note" placeholder="Необязательно" autocomplete="off">' +
     '<label>Дата</label><div class="row2"><button class="chip '+(isCur() ? 'on' : '')+'" data-act="opdate" data-v="0">Сегодня</button><button class="chip" data-act="opdate" data-v="1">Вчера</button><input id="f-date" type="date" value="'+d+'"></div>' +
@@ -827,7 +937,7 @@ var ACT = {
   plan: openPlan,
   newcat: function(){ openCat(); },
   editcat: function(d){ openCat(d.id); },
-  newgoal: function(){ openGoal(); },
+  newgoal: function(){ if (S.goals.length >= 1 && gate('Несколько целей')) return; openGoal(); },
   editgoal: function(d){ openGoal(d.id); },
   contrib: function(d){ openContrib(d.id); },
   maingoal: function(d){ S.mainGoal = d.id; save(); haptic(); render(); },
@@ -847,6 +957,11 @@ var ACT = {
     opType = d.v;
     document.querySelectorAll('#sheet .seg button').forEach(function(b){ b.classList.toggle('on', b === el); });
     $('#f-cats').style.display = opType === 'expense' ? '' : 'none';
+  },
+  opfill: function(d){
+    if (opType !== 'expense') ACT.optype({v: 'expense'});
+    ACT.opcat({id: d.cat});
+    $('#f-amt').value = d.amt; $('#f-note').value = d.note || '';
   },
   opcat: function(d){
     opCat = d.id;
@@ -884,6 +999,22 @@ var ACT = {
   pickem: function(d){ $('#c-em').value = d.v; document.querySelectorAll('[data-act=pickem]').forEach(function(b){ b.classList.toggle('on', b.dataset.v === d.v); }); },
   gidea: function(d){ $('#g-name').value = d.v; },
   gmonths: function(d){ $('#g-months').value = d.v; updGoal(); },
+  pay: function(d){
+    if (PLAN && PLAN.pay) { openLink(PLAN.pay + (PLAN.pay.indexOf('?') > -1 ? '&' : '?') + 'plan=' + d.v); return; }
+    if (PLAN && PLAN.support) { openTg('https://t.me/' + PLAN.support + '?text=' + encodeURIComponent('Хочу оформить подписку Копилка (' + (d.v === 'year' ? 'год' : 'месяц') + '). Мой id: ' + (tgUser ? tgUser.id : ''))); return; }
+    toast('Оплата скоро появится');
+  },
+  support: function(){ if (PLAN && PLAN.support) openTg('https://t.me/' + PLAN.support); },
+  legal: function(d){ openLink(location.origin + '/' + d.v); },
+  sharecard: function(){ openShare(); },
+  doshare: function(){
+    var cv = window.__shareCv; if (!cv) return;
+    cv.toBlob(function(b){
+      var f; try { f = new File([b], 'kopilka.png', {type: 'image/png'}); } catch(e){}
+      if (f && navigator.canShare && navigator.canShare({files: [f]})) navigator.share({files: [f]}).catch(function(){});
+      else toast('Удерживайте картинку и сохраните её');
+    }, 'image/png');
+  },
   invite: function(){
     var link = 'https://t.me/' + BOT, text = 'Считаю расходы и коплю на цели в Копилке. Заходи!' + (REF && REF.code ? ' Мой код друга: ' + REF.code + ' (введи его в Настройках — получишь бонус).' : '');
     var url = 'https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text);
@@ -947,6 +1078,7 @@ var ACT = {
   scope: function(d){ setScope(d.v); },
   openfam: function(){ openFamily(); },
   famcreate: function(){
+    if (gate('Семейный бюджет')) return;
     api('POST', '/api/family/create').then(function(r){ FAM = r; slots.fam = newSlot(); closeSheet(); setScope('fam'); toast('Семья создана. Отправьте код партнёру'); setTimeout(openFamily, 400); })
       .catch(function(e){ toast(e.status === 402 ? 'Для создания семьи нужна подписка' : 'Не удалось создать семью'); });
   },
@@ -971,9 +1103,9 @@ var ACT = {
       }).catch(function(){ toast('Не удалось выйти'); });
     });
   },
-  remtog: function(d){ PREFS[d.k] = !PREFS[d.k]; savePrefs(); render(); },
+  remtog: function(d){ if (!PREFS[d.k] && gate('Напоминания в боте')) return; PREFS[d.k] = !PREFS[d.k]; savePrefs(); render(); },
   remhour: function(d){ PREFS.hour = Number(d.v); savePrefs(); render(); },
-  newrec: function(){ openRecur(); },
+  newrec: function(){ if (gate('Регулярные платежи')) return; openRecur(); },
   reccat: function(d, el){ recCat = d.id; document.querySelectorAll('[data-act="reccat"]').forEach(function(b){ b.classList.toggle('on', b === el); }); },
   saverec: function(){
     var name = $('#r-name').value.trim(), a = num($('#r-amt').value), day = Math.min(28, Math.max(1, Math.round(num($('#r-day').value) || 1)));
@@ -988,6 +1120,7 @@ var ACT = {
     confirmBox('Удалить регулярный платёж «' + r.name + '»? Уже добавленные операции останутся.', function(){ S.recurring = S.recurring.filter(function(x){ return x.id !== d.id; }); save(); render(); });
   },
   export: function(){
+    if (gate('Экспорт операций')) return;
     sheet('<h3>Операции в CSV</h3><div class="hi" style="font-weight:600;margin:.2rem 0 .6rem">Скопируйте и вставьте в Excel или Google Таблицы (разделитель — точка с запятой).</div><textarea class="csv" id="csv-text" readonly></textarea>' +
       '<button class="btn big" data-act="copycsv">Скопировать</button>');
     $('#csv-text').value = csvText();
@@ -1086,6 +1219,43 @@ $('#fab').innerHTML = ic('plus', 34);
 
 /* ---------- Семья, регулярные платежи, напоминания, экспорт ---------- */
 var REF = null, recCat = '';
+/* ---------- Подписка ---------- */
+var PLAN = null;
+function locked(){ return !!(PLAN && PLAN.locked); }
+function gate(what){ if (!locked()) return false; openPaywall(what); return true; }
+function openLink(u){ try { if (tg && tg.openLink) { tg.openLink(u); return; } } catch(e){} window.open(u, '_blank'); }
+function openTg(u){ try { if (tg && tg.openTelegramLink) { tg.openTelegramLink(u); return; } } catch(e){} window.open(u, '_blank'); }
+function dmy(ts){ var d = new Date(ts); return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear(); }
+function priceBtns(){
+  if (!PLAN) return '';
+  var m = PLAN.priceMonth, y = PLAN.priceYear, save = Math.round((1 - y / (m * 12)) * 100);
+  var old = function(v, full){ return PLAN.discount > 0 ? ' <s style="opacity:.6;font-weight:500">' + fmt(full) + '</s>' : ''; };
+  return (PLAN.discount > 0 ? '<div class="hi" style="margin:0 .25rem .6rem;font-weight:600">Ваша скидка за друзей: <b style="color:var(--ink)">' + PLAN.discount + '%</b></div>' : '') +
+    '<button class="btn" data-act="pay" data-v="year" style="margin-bottom:.5rem">Год — ' + fmt(y) + old(y, PLAN.fullYear) + (save > 0 ? ' · выгоднее на ' + save + '%' : '') + '</button>' +
+    '<button class="btn ghost" data-act="pay" data-v="month">Месяц — ' + fmt(m) + old(m, PLAN.fullMonth) + '</button>';
+}
+function planCard(){
+  if (!ONLINE || !PLAN || (!PLAN.paywall && PLAN.status !== 'premium')) return '';
+  var t, extra = '';
+  if (PLAN.status === 'premium') { t = 'Подписка активна до ' + dmy(PLAN.until); if (PLAN.daysLeft <= 7) extra = priceBtns(); }
+  else if (PLAN.status === 'trial') { t = 'Пробный период: осталось ' + PLAN.daysLeft + ' ' + plural(PLAN.daysLeft, ['день', 'дня', 'дней']) + '. Все функции открыты.'; extra = priceBtns(); }
+  else { t = 'Пробный период закончился. Бесплатно остаются учёт расходов и одна цель.'; extra = priceBtns(); }
+  return '<div class="card set"><label style="margin-top:0">Подписка</label><div class="hi" style="margin:0 .25rem .7rem;font-weight:600">' + t + '</div>' + extra + '</div>';
+}
+function supportCard(){
+  if (!ONLINE) return '';
+  var sup = PLAN && PLAN.support;
+  return '<div class="card set"><label style="margin-top:0">Помощь</label>' +
+    (sup ? '<button class="btn ghost" data-act="support">Написать в поддержку</button>' : '') +
+    '<div class="tog" style="margin-top:.4rem"><a data-act="legal" data-v="privacy" style="color:var(--pink-d);font-weight:700">Политика конфиденциальности</a><a data-act="legal" data-v="terms" style="color:var(--pink-d);font-weight:700">Условия подписки</a></div></div>';
+}
+function openPaywall(what){
+  sheet('<h3>Нужна подписка</h3><div class="hi" style="margin:.2rem .25rem .9rem;font-weight:600">' + esc(what || 'Эта функция') + ' доступна по подписке. Учёт расходов и одна цель остаются бесплатными.</div>' + priceBtns() + '<div class="hi" style="margin:.8rem .25rem 0;font-size:.8rem;font-weight:600">Без автопродления: когда срок закончится, решаете вы.</div>');
+}
+function trialBar(){
+  if (!ONLINE || !PLAN || !PLAN.paywall || PLAN.status !== 'trial' || PLAN.daysLeft > 3) return '';
+  return '<div class="trialbar" data-tab="set">Пробный период: осталось ' + PLAN.daysLeft + ' ' + plural(PLAN.daysLeft, ['день', 'дня', 'дней']) + ' · <b>Подробнее</b></div>';
+}
 function scopeBar(){
   return '<div class="seg scope"><button class="'+(scope === 'me' ? 'on' : '')+'" data-act="scope" data-v="me">Личный</button>' +
     '<button class="'+(scope === 'fam' ? 'on' : '')+'" data-act="scope" data-v="fam">'+(FAM && FAM.family ? 'Семья' : 'Семья ＋')+'</button></div>';
@@ -1241,6 +1411,7 @@ function loadExtras(){
   if (!ONLINE) return;
   loadFamInfo().then(function(){ if (TAB === 'set' || TAB === 'home') render(); }).catch(function(){});
   api('GET', '/api/prefs').then(function(r){ PREFS = {remind: !!r.remind, weekly: !!r.weekly, hour: r.hour || 20}; if (TAB === 'set') render(); }).catch(function(){});
+  api('GET', '/api/plan').then(function(r){ PLAN = r; if (TAB === 'set' || TAB === 'home') render(); }).catch(function(){});
   api('GET', '/api/ref').then(function(r){ REF = r; if (TAB === 'set') render(); }).catch(function(){});
 }
 function boot(){

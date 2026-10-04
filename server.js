@@ -105,6 +105,8 @@ const q = {
   setCode: db.prepare('UPDATE families SET code = ? WHERE id = ?'),
   delFam: db.prepare('DELETE FROM families WHERE id = ?'),
   premiumOf: db.prepare('SELECT until FROM premium WHERE user_id = ?'),
+  userCreated: db.prepare('SELECT created_at FROM users WHERE id = ?'),
+  putPremium: db.prepare(`INSERT INTO premium (user_id, until) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET until = excluded.until`),
   famPremium: db.prepare(`SELECT MAX(p.until) AS until FROM premium p JOIN members m ON m.user_id = p.user_id WHERE m.family_id = ?`),
   getPrefs: db.prepare('SELECT remind, weekly, hour, tz FROM prefs WHERE user_id = ?'),
   putPrefs: db.prepare(`INSERT INTO prefs (user_id, remind, weekly, hour, tz) VALUES (?, ?, ?, ?, ?)
@@ -125,6 +127,14 @@ const q = {
   markSent: db.prepare('UPDATE prefs SET last_sent = ? WHERE user_id = ?'),
 };
 const FAMILY_MAX = Number(process.env.FAMILY_MAX) || 2;
+/* Подписка. PAYWALL=1 включает платные функции после пробного периода. */
+const PAYWALL = process.env.PAYWALL === '1';
+const TRIAL_DAYS = Number(process.env.TRIAL_DAYS) || 14;
+const PRICE_MONTH = Number(process.env.PRICE_MONTH) || 199;
+const PRICE_YEAR = Number(process.env.PRICE_YEAR) || 1590;
+const PAY_URL = process.env.PAY_URL || '';                       // ссылка на оплату; {uid} заменится на id пользователя
+const SUPPORT_TG = String(process.env.SUPPORT_TG || '').replace(/^@/, '').replace(/[^\w]/g, '');
+const PAY_SECRET = process.env.PAY_SECRET || '';                 // секрет для уведомлений об оплате
 const FAMILY_PAID = process.env.FAMILY_PAID === '1';   // 1 = семью создаёт только подписчик
 
 function tx(fn) {
@@ -281,6 +291,34 @@ function newCode() {
 }
 function familyIdOf(uid) { const r = q.famOf.get(uid); return r ? r.family_id : 0; }
 function hasPremium(uid) { const r = q.premiumOf.get(uid); return !!(r && r.until > Date.now()); }
+/* status: trial — пробный период, premium — оплачено, free — пробный закончился, платные функции закрыты */
+function planInfo(uid) {
+  const now = Date.now(), DAY = 86400000;
+  const pr = q.premiumOf.get(uid);
+  const u = q.userCreated.get(uid);
+  const trialEnd = (u ? u.created_at : now) + TRIAL_DAYS * DAY;
+  let status = 'trial', until = trialEnd;
+  if (pr && pr.until > now) { status = 'premium'; until = pr.until; }
+  else if (PAYWALL && trialEnd <= now) status = 'free';
+  const disc = discountFor(q.refPaying.get(uid, now).n);
+  const k = (100 - disc) / 100;
+  return {
+    status, until, daysLeft: Math.max(0, Math.ceil((until - now) / DAY)),
+    locked: status === 'free', paywall: PAYWALL,
+    priceMonth: Math.round(PRICE_MONTH * k), priceYear: Math.round(PRICE_YEAR * k),
+    fullMonth: PRICE_MONTH, fullYear: PRICE_YEAR, discount: disc,
+    pay: PAY_URL ? PAY_URL.replace('{uid}', String(uid)) : '', support: SUPPORT_TG,
+  };
+}
+function grantPremium(uid, days) {
+  return tx(() => {
+    const cur = q.premiumOf.get(uid);
+    const base = Math.max(Date.now(), cur ? cur.until : 0);
+    const until = base + days * 86400000;
+    q.putPremium.run(uid, until);
+    return until;
+  });
+}
 function familyActive(fid) {
   if (!FAMILY_PAID) return true;
   const r = q.famPremium.get(fid);
@@ -340,6 +378,8 @@ async function handleApi(req, res, url) {
   const user = authenticate(req);
   rateLimit(user.id);
   const p = url.pathname, m = req.method;
+
+  if (p === '/api/plan' && m === 'GET') { touch(user); return json(res, 200, planInfo(user.id)); }
 
   if (p === '/api/state' && m === 'GET') {
     touch(user);
@@ -454,6 +494,22 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(INDEX_FILE));
     }
+    if (req.method === 'POST' && url.pathname === '/api/pay/webhook') {
+      /* Платёжный сервис присылает {"user_id": 123, "days": 30}; в адресе или заголовке x-secret — PAY_SECRET */
+      const given = Buffer.from(String(url.searchParams.get('secret') || req.headers['x-secret'] || ''));
+      const want = Buffer.from(PAY_SECRET);
+      if (!PAY_SECRET || given.length !== want.length || !crypto.timingSafeEqual(given, want)) throw httpError(403, 'forbidden');
+      const b = await readJson(req, 4096);
+      const uid = Number(b && b.user_id), days = Number(b && b.days);
+      if (!Number.isInteger(uid) || uid <= 0 || !(days > 0 && days <= 400)) throw httpError(400, 'bad payload');
+      return json(res, 200, { until: grantPremium(uid, Math.round(days)) });
+    }
+    if (req.method === 'GET' && (url.pathname === '/privacy' || url.pathname === '/terms')) {
+      const f = path.join(__dirname, url.pathname.slice(1) + '.html');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      const who = SUPPORT_TG ? `<a href="https://t.me/${SUPPORT_TG}">@${SUPPORT_TG}</a> в Telegram` : 'через бота в Telegram';
+      return res.end(fs.readFileSync(f, 'utf8').replace(/\{\{SUPPORT\}\}/g, who));
+    }
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
     return json(res, 404, { error: 'not found' });
   } catch (e) {
@@ -478,14 +534,122 @@ async function tgApi(method, payload, timeoutMs) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let stopping = false;
 
+/* Быстрый ввод: «кофе 250», «такси 300», «+5000 зарплата» */
+const KEYWORDS = [
+  [/кофе|обед|ужин|завтрак|пицц|продукт|магазин|супермаркет|еда|кафе|ресторан|доставк|перекус|вкусня/i, ['еда', 'продукт', 'кафе']],
+  [/такси|метро|автобус|бензин|заправк|проезд|парков|транспорт|маршрутк/i, ['транспорт', 'такси', 'авто']],
+  [/жкх|свет|электр|вода|газ|квартплат|коммунал|интернет|связь/i, ['жкх', 'связь']],
+  [/аренд|ипотек|жиль|квартир/i, ['жиль']],
+  [/кино|театр|концерт|бар|клуб|игр|развлеч|отдых/i, ['отдых', 'развлеч']],
+  [/аптек|врач|лекарств|стоматолог|здоров/i, ['здоров']],
+  [/одежд|обув|куртк|кроссовк/i, ['одежд']],
+  [/кредит|рассрочк/i, ['кредит']],
+];
+function parseQuick(text) {
+  let t = String(text || '').trim();
+  if (!t || t.startsWith('/') || t.length > 120) return null;
+  let income = false;
+  if (/^\+/.test(t)) { income = true; t = t.slice(1).trim(); }
+  else if (/^(доход|зарплата|зп|аванс)\b/i.test(t)) income = true;
+  const m = t.match(/(\d[\d\s]*(?:[.,]\d{1,2})?)\s*(?:₽|руб\w*|р\b)?\s*$/i) || t.match(/^\s*(\d[\d\s]*(?:[.,]\d{1,2})?)\s*(?:₽|руб\w*|р\b)?/i);
+  if (!m) return null;
+  const amount = Number(m[1].replace(/\s/g, '').replace(',', '.'));
+  if (!isFinite(amount) || amount <= 0 || amount >= 1e9) return null;
+  const note = t.replace(m[0], '').replace(/[₽]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  return { income, amount, note };
+}
+function guessCat(cats, note) {
+  const low = note.toLowerCase();
+  if (!low) return null;
+  for (const c of cats) {
+    for (const w of c.name.toLowerCase().split(/[^а-яa-z0-9ё]+/).filter((x) => x.length >= 4)) {
+      if (low.includes(w.slice(0, 4))) return c;
+    }
+  }
+  for (const [re, names] of KEYWORDS) {
+    if (!re.test(low)) continue;
+    for (const n of names) { const c = cats.find((x) => x.name.toLowerCase().includes(n)); if (c) return c; }
+  }
+  return null;
+}
+function addQuickOp(uid, op) {
+  for (let i = 0; i < 4; i++) {
+    const cur = loadState(uid);
+    if (!cur.state) return false;     // человек ещё не открывал приложение
+    const st = cur.state;
+    st.ops.push({ id: crypto.randomBytes(4).toString('hex'), type: op.income ? 'income' : 'expense', amount: op.amount,
+      catId: op.income ? '' : op.catId, note: op.note || '', date: op.date, t: Date.now(), by: uid });
+    const r = saveState(uid, { rev: cur.rev, state: st });
+    if (!r.conflict) return true;
+  }
+  return false;
+}
+const pendingQuick = new Map();   // короткий ключ -> { uid, op, exp }
+function localDay(uid) {
+  const pr = q.getPrefs.get(uid);
+  return localParts(pr ? pr.tz : 180).day;
+}
+const rubFmt = (n) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₽';
+async function handleQuick(m, text) {
+  const pq = parseQuick(text);
+  if (!pq) return false;
+  const uid = m.from.id;
+  const cur = loadState(uid);
+  if (!cur.state) {
+    await tgApi('sendMessage', { chat_id: m.chat.id, text: 'Сначала откройте Копилку один раз, чтобы создать бюджет 👇', reply_markup: openButton() });
+    return true;
+  }
+  const date = localDay(uid);
+  const op = { income: pq.income, amount: pq.amount, note: pq.note, date, catId: '' };
+  if (pq.income) {
+    addQuickOp(uid, op);
+    await tgApi('sendMessage', { chat_id: m.chat.id, text: `✅ Доход ${rubFmt(pq.amount)} записан` });
+    return true;
+  }
+  const cat = guessCat(cur.state.cats, pq.note);
+  if (cat) {
+    op.catId = cat.id;
+    addQuickOp(uid, op);
+    await tgApi('sendMessage', { chat_id: m.chat.id, text: `✅ ${rubFmt(pq.amount)} — ${cat.name}${pq.note ? ' (' + pq.note + ')' : ''}` });
+    return true;
+  }
+  const key = crypto.randomBytes(4).toString('hex');
+  pendingQuick.set(key, { uid, op, exp: Date.now() + 3600000 });
+  for (const [k, v] of pendingQuick) if (v.exp < Date.now()) pendingQuick.delete(k);
+  const rows = [];
+  const cats = cur.state.cats.slice(0, 12);
+  for (let i = 0; i < cats.length; i += 2) rows.push(cats.slice(i, i + 2).map((c) => ({ text: c.name.slice(0, 24), callback_data: `q|${key}|${c.id}` })));
+  await tgApi('sendMessage', { chat_id: m.chat.id, text: `${rubFmt(pq.amount)}${pq.note ? ' — ' + pq.note : ''}\nВ какую категорию записать?`, reply_markup: { inline_keyboard: rows } });
+  return true;
+}
+async function handleCallback(cb) {
+  const parts = String(cb.data || '').split('|');
+  if (parts[0] !== 'q' || !cb.message) return tgApi('answerCallbackQuery', { callback_query_id: cb.id });
+  const pend = pendingQuick.get(parts[1]);
+  if (!pend || pend.uid !== cb.from.id) return tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Время вышло, отправьте трату ещё раз' });
+  pendingQuick.delete(parts[1]);
+  const cur = loadState(pend.uid);
+  const cat = cur.state && cur.state.cats.find((c) => c.id === parts[2]);
+  if (!cat) return tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Категория не найдена' });
+  pend.op.catId = cat.id;
+  addQuickOp(pend.uid, pend.op);
+  await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Записано' });
+  await tgApi('editMessageText', { chat_id: cb.message.chat.id, message_id: cb.message.message_id, text: `✅ ${rubFmt(pend.op.amount)} — ${cat.name}` });
+}
 async function handleUpdate(u) {
+  if (u.callback_query) return handleCallback(u.callback_query);
   const m = u.message;
   if (!m || !m.chat || m.chat.type !== 'private') return;
   const text = String(m.text || '').trim();
   const name = (m.from && m.from.first_name) || '';
+  if (/^\/(help|support)\b/.test(text)) {
+    const sup = SUPPORT_TG ? `\n\nПоддержка: @${SUPPORT_TG}` : '';
+    return tgApi('sendMessage', { chat_id: m.chat.id, text: 'Быстрая запись трат: отправьте «кофе 250» или «такси 300». Доход: «+5000 зарплата».' + sup, reply_markup: openButton() });
+  }
+  if (!text.startsWith('/') && await handleQuick(m, text)) return;
   const msg = text.startsWith('/start')
-    ? `Привет${name ? ', ' + name : ''}! 👋\n\nЭто Копилка: считайте расходы, планируйте бюджет и копите на цели.\nНажмите кнопку ниже, чтобы открыть.`
-    : 'Нажмите кнопку ниже, чтобы открыть Копилку 👇';
+    ? `Привет${name ? ', ' + name : ''}! 👋\n\nЭто Копилка: считайте расходы, планируйте бюджет и копите на цели.\nНажмите кнопку ниже, чтобы открыть.\n\nМожно и быстрее: просто напишите сюда «кофе 250», и трата запишется сама.`
+    : 'Нажмите кнопку ниже, чтобы открыть Копилку 👇\nИли напишите трату, например «кофе 250».';
   await tgApi('sendMessage', {
     chat_id: m.chat.id,
     text: msg,
@@ -505,7 +669,7 @@ async function startBot() {
       if (!APP_URL) { console.warn('Бот: не задан APP_URL — кнопка открытия приложения не настроена.'); return; }
       await tgApi('deleteWebhook');
       await tgApi('setChatMenuButton', { menu_button: { type: 'web_app', text: 'Открыть', web_app: { url: APP_URL } } });
-      await tgApi('setMyCommands', { commands: [{ command: 'start', description: 'Открыть Копилку' }] });
+      await tgApi('setMyCommands', { commands: [{ command: 'start', description: 'Открыть Копилку' }, { command: 'help', description: 'Как быстро записать трату' }] });
       break;
     } catch (e) {
       console.error('Бот: не удалось подключиться к Telegram (' + e.message + '), повтор через ' + Math.round(delay / 1000) + ' с');
@@ -516,7 +680,7 @@ async function startBot() {
   let offset = 0;
   while (!stopping) {
     try {
-      const r = await tgApi('getUpdates', { offset, timeout: 50, allowed_updates: ['message'] }, 65000);
+      const r = await tgApi('getUpdates', { offset, timeout: 50, allowed_updates: ['message', 'callback_query'] }, 65000);
       if (!r.ok) { await sleep(5000); continue; }
       for (const u of r.result) {
         offset = u.update_id + 1;
