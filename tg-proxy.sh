@@ -32,7 +32,8 @@ CADDY
 systemctl enable caddy >/dev/null
 systemctl restart caddy
 
-ufw allow OpenSSH >/dev/null
+SSHP="$(ss -tlnp 2>/dev/null | awk '/sshd/ {n=split($4,a,":"); print a[n]}' | sort -u | tr '\n' ' ')"
+for P in 22 $SSHP; do ufw allow "$P"/tcp >/dev/null; done
 ufw allow 80/tcp >/dev/null
 ufw allow 443/tcp >/dev/null
 ufw --force enable >/dev/null
