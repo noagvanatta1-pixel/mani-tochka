@@ -80,6 +80,9 @@ db.exec(`
     PRIMARY KEY (user_id, goal_id)
   );
 `);
+for (const col of ['bills INTEGER NOT NULL DEFAULT 0', 'monthly INTEGER NOT NULL DEFAULT 0', "last_bills TEXT NOT NULL DEFAULT ''", "last_month TEXT NOT NULL DEFAULT ''"]) {
+  try { db.exec('ALTER TABLE prefs ADD COLUMN ' + col); } catch (_) { /* колонка уже есть */ }
+}
 
 const q = {
   upsertUser: db.prepare(`INSERT INTO users (id, first_name, created_at, last_seen) VALUES (?, ?, ?, ?)
@@ -112,11 +115,11 @@ const q = {
   userCreated: db.prepare('SELECT created_at FROM users WHERE id = ?'),
   putPremium: db.prepare(`INSERT INTO premium (user_id, until) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET until = excluded.until`),
   famPremium: db.prepare(`SELECT MAX(p.until) AS until FROM premium p JOIN members m ON m.user_id = p.user_id WHERE m.family_id = ?`),
-  getPrefs: db.prepare('SELECT remind, weekly, hour, tz FROM prefs WHERE user_id = ?'),
-  putPrefs: db.prepare(`INSERT INTO prefs (user_id, remind, weekly, hour, tz) VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET remind = excluded.remind, weekly = excluded.weekly, hour = excluded.hour, tz = excluded.tz`),
+  getPrefs: db.prepare('SELECT remind, weekly, bills, monthly, hour, tz FROM prefs WHERE user_id = ?'),
+  putPrefs: db.prepare(`INSERT INTO prefs (user_id, remind, weekly, bills, monthly, hour, tz) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET remind = excluded.remind, weekly = excluded.weekly, bills = excluded.bills, monthly = excluded.monthly, hour = excluded.hour, tz = excluded.tz`),
   delPrefs: db.prepare('DELETE FROM prefs WHERE user_id = ?'),
-  remindList: db.prepare('SELECT user_id, remind, weekly, hour, tz, last_sent, last_week FROM prefs WHERE remind = 1 OR weekly = 1'),
+  remindList: db.prepare('SELECT user_id, remind, weekly, bills, monthly, hour, tz, last_sent, last_week, last_bills, last_month FROM prefs WHERE remind = 1 OR weekly = 1 OR bills = 1 OR monthly = 1'),
   refCodeOf: db.prepare('SELECT code FROM refcodes WHERE user_id = ?'),
   refByCode: db.prepare('SELECT user_id FROM refcodes WHERE code = ?'),
   insRefCode: db.prepare('INSERT INTO refcodes (user_id, code) VALUES (?, ?)'),
@@ -129,6 +132,8 @@ const q = {
   delRefCode: db.prepare('DELETE FROM refcodes WHERE user_id = ?'),
   markWeek: db.prepare('UPDATE prefs SET last_week = ? WHERE user_id = ?'),
   markSent: db.prepare('UPDATE prefs SET last_sent = ? WHERE user_id = ?'),
+  markBills: db.prepare('UPDATE prefs SET last_bills = ? WHERE user_id = ?'),
+  markMonth: db.prepare('UPDATE prefs SET last_month = ? WHERE user_id = ?'),
 };
 const FAMILY_MAX = Number(process.env.FAMILY_MAX) || 2;
 /* Подписка. PAYWALL=1 включает платные функции после пробного периода. */
@@ -136,10 +141,13 @@ const PAYWALL = process.env.PAYWALL === '1';
 const TRIAL_DAYS = Number(process.env.TRIAL_DAYS) || 14;
 const PRICE_MONTH = Number(process.env.PRICE_MONTH) || 99;
 const PRICE_YEAR = Number(process.env.PRICE_YEAR) || 790;
+const PRICE_LIFE = Number(process.env.PRICE_LIFE) || 1990;     // разовая оплата, подписка навсегда
+const LIFETIME_UNTIL = 4102444800000;                           // 01.01.2100
 const PAY_URL = process.env.PAY_URL || '';                       // ссылка на оплату; {uid} заменится на id пользователя
 const SUPPORT_TG = String(process.env.SUPPORT_TG || '').replace(/^@/, '').replace(/[^\w]/g, '');
 const STARS_MONTH = Number(process.env.STARS_MONTH) || 75;       // цена в звёздах Telegram
 const STARS_YEAR = Number(process.env.STARS_YEAR) || 600;
+const STARS_LIFE = Number(process.env.STARS_LIFE) || 1500;
 /* Оплата картой/СБП через ЮKassa в Telegram: платёжный токен из @BotFather (Payments → ЮKassa) */
 const YK_TOKEN = process.env.YK_TOKEN || '';
 const PAY_SECRET = process.env.PAY_SECRET || '';                 // секрет для уведомлений об оплате
@@ -299,6 +307,26 @@ function newCode() {
 }
 function familyIdOf(uid) { const r = q.famOf.get(uid); return r ? r.family_id : 0; }
 function hasPremium(uid) { const r = q.premiumOf.get(uid); return !!(r && r.until > Date.now()); }
+const PLAN_TAIL = ': несколько целей, семья, регулярные платежи, экспорт и напоминания';
+function parsePlan(v) { return v === 'life' || v === 'year' || v === 'month' ? v : ''; }
+const RATES_URL = process.env.RATES_URL || 'https://www.cbr-xml-daily.ru/daily_json.js';
+let ratesCache = { at: 0, rates: null, date: '' };
+async function getRates() {
+  if (ratesCache.rates && Date.now() - ratesCache.at < 6 * 3600000) return ratesCache;
+  try {
+    const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 8000);
+    const r = await fetch(RATES_URL, { signal: ctl.signal }); clearTimeout(tm);
+    const j = JSON.parse(await r.text()), rates = {};
+    for (const [code, v] of Object.entries(j.Valute || {})) if (CUR_SYM[code] && v && v.Value > 0 && v.Nominal > 0) rates[code] = v.Value / v.Nominal;
+    if (Object.keys(rates).length) ratesCache = { at: Date.now(), rates, date: String(j.Date || '') };
+  } catch (_) { /* отдадим прошлый курс, если он есть */ }
+  return ratesCache;
+}
+function planMeta(plan, info) {
+  if (plan === 'life') return { title: 'Копилка навсегда', description: 'Пожизненная подписка' + PLAN_TAIL, label: 'Навсегда', stars: info.starsLife, rub: info.priceLife };
+  if (plan === 'year') return { title: 'Копилка на год', description: 'Подписка на 12 месяцев' + PLAN_TAIL, label: 'Год', stars: info.starsYear, rub: info.priceYear };
+  return { title: 'Копилка на месяц', description: 'Подписка на 30 дней' + PLAN_TAIL, label: 'Месяц', stars: info.starsMonth, rub: info.priceMonth };
+}
 /* status: trial — пробный период, premium — оплачено, free — пробный закончился, платные функции закрыты */
 function planInfo(uid) {
   const now = Date.now(), DAY = 86400000;
@@ -313,10 +341,10 @@ function planInfo(uid) {
   return {
     status, until, daysLeft: Math.max(0, Math.ceil((until - now) / DAY)),
     locked: status === 'free', paywall: PAYWALL,
-    priceMonth: Math.round(PRICE_MONTH * k), priceYear: Math.round(PRICE_YEAR * k),
-    fullMonth: PRICE_MONTH, fullYear: PRICE_YEAR, discount: disc,
+    priceMonth: Math.round(PRICE_MONTH * k), priceYear: Math.round(PRICE_YEAR * k), priceLife: Math.round(PRICE_LIFE * k),
+    fullMonth: PRICE_MONTH, fullYear: PRICE_YEAR, fullLife: PRICE_LIFE, discount: disc,
     pay: PAY_URL ? PAY_URL.replace('{uid}', String(uid)) : '', support: SUPPORT_TG,
-    card: !!(BOT_TOKEN && BOT_NAME && YK_TOKEN), stars: !!(BOT_TOKEN && BOT_NAME), starsMonth: Math.round(STARS_MONTH * k), starsYear: Math.round(STARS_YEAR * k),
+    card: !!(BOT_TOKEN && BOT_NAME && YK_TOKEN), stars: !!(BOT_TOKEN && BOT_NAME), starsMonth: Math.round(STARS_MONTH * k), starsYear: Math.round(STARS_YEAR * k), starsLife: Math.round(STARS_LIFE * k),
   };
 }
 function grantPremium(uid, days) {
@@ -390,42 +418,39 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/pay/stars' && m === 'POST') {
     const body = await readJson(req, 1024);
-    const plan = body && body.plan === 'year' ? 'year' : body && body.plan === 'month' ? 'month' : '';
+    const plan = parsePlan(body && body.plan);
     if (!plan) throw httpError(400, 'bad plan');
     if (!BOT_TOKEN || !BOT_NAME) throw httpError(503, 'payments unavailable');
     touch(user);
-    const info = planInfo(user.id);
-    const stars = plan === 'year' ? info.starsYear : info.starsMonth;
+    const pm = planMeta(plan, planInfo(user.id));
     const r = await tgApi('createInvoiceLink', {
-      title: plan === 'year' ? 'Копилка на год' : 'Копилка на месяц',
-      description: plan === 'year' ? 'Подписка на 12 месяцев: несколько целей, семья, регулярные платежи, экспорт и напоминания' : 'Подписка на 30 дней: несколько целей, семья, регулярные платежи, экспорт и напоминания',
-      payload: plan + '|' + user.id,
-      currency: 'XTR',
-      prices: [{ label: plan === 'year' ? 'Год' : 'Месяц', amount: stars }],
+      title: pm.title, description: pm.description, payload: plan + '|' + user.id,
+      currency: 'XTR', prices: [{ label: pm.label, amount: pm.stars }],
     }, 10000).catch(() => null);
     if (!r || !r.ok || typeof r.result !== 'string') throw httpError(502, 'telegram error');
-    return json(res, 200, { link: r.result, stars });
+    return json(res, 200, { link: r.result, stars: pm.stars });
   }
 
   if (p === '/api/pay/card' && m === 'POST') {
     const body = await readJson(req, 1024);
-    const plan = body && body.plan === 'year' ? 'year' : body && body.plan === 'month' ? 'month' : '';
+    const plan = parsePlan(body && body.plan);
     if (!plan) throw httpError(400, 'bad plan');
     if (!BOT_TOKEN || !BOT_NAME || !YK_TOKEN) throw httpError(503, 'card payments unavailable');
     touch(user);
-    const info = planInfo(user.id);
-    const rub = plan === 'year' ? info.priceYear : info.priceMonth;
-    const title = plan === 'year' ? 'Копилка на год' : 'Копилка на месяц';
+    const pm = planMeta(plan, planInfo(user.id));
     const r = await tgApi('createInvoiceLink', {
-      title,
-      description: plan === 'year' ? 'Подписка на 12 месяцев: несколько целей, семья, регулярные платежи, экспорт и напоминания' : 'Подписка на 30 дней: несколько целей, семья, регулярные платежи, экспорт и напоминания',
-      payload: plan + '|' + user.id,
-      provider_token: YK_TOKEN,
-      currency: 'RUB',
-      prices: [{ label: plan === 'year' ? 'Год' : 'Месяц', amount: rub * 100 }],
+      title: pm.title, description: pm.description, payload: plan + '|' + user.id,
+      provider_token: YK_TOKEN, currency: 'RUB', prices: [{ label: pm.label, amount: pm.rub * 100 }],
     }, 10000).catch(() => null);
     if (!r || !r.ok || typeof r.result !== 'string') throw httpError(502, 'telegram error');
-    return json(res, 200, { link: r.result, rub });
+    return json(res, 200, { link: r.result, rub: pm.rub });
+  }
+
+  if (DEV && p === '/api/dev/reminders' && m === 'POST') { await sendReminders(true); return json(res, 200, { ok: true }); }
+
+  if (p === '/api/rates' && m === 'GET') {
+    const c = await getRates();
+    return json(res, 200, { rates: c.rates, date: c.date });
   }
 
   if (p === '/api/plan' && m === 'GET') { touch(user); return json(res, 200, planInfo(user.id)); }
@@ -512,15 +537,15 @@ async function handleApi(req, res, url) {
 
   /* напоминания */
   if (p === '/api/prefs' && m === 'GET') {
-    const r = q.getPrefs.get(user.id) || { remind: 0, weekly: 0, hour: 20, tz: 180 };
-    return json(res, 200, { remind: !!r.remind, weekly: !!r.weekly, hour: r.hour, tz: r.tz });
+    const r = q.getPrefs.get(user.id) || { remind: 0, weekly: 0, bills: 0, monthly: 0, hour: 20, tz: 180 };
+    return json(res, 200, { remind: !!r.remind, weekly: !!r.weekly, bills: !!r.bills, monthly: !!r.monthly, hour: r.hour, tz: r.tz });
   }
   if (p === '/api/prefs' && m === 'PUT') {
     const b = await readJson(req, 1024);
     const hour = Math.min(23, Math.max(0, Math.round(Number(b && b.hour))));
     const tz = Math.min(840, Math.max(-720, Math.round(Number(b && b.tz))));
     touch(user);
-    q.putPrefs.run(user.id, b && b.remind ? 1 : 0, b && b.weekly ? 1 : 0, Number.isFinite(hour) ? hour : 20, Number.isFinite(tz) ? tz : 180);
+    q.putPrefs.run(user.id, b && b.remind ? 1 : 0, b && b.weekly ? 1 : 0, b && b.bills ? 1 : 0, b && b.monthly ? 1 : 0, Number.isFinite(hour) ? hour : 20, Number.isFinite(tz) ? tz : 180);
     return json(res, 200, { ok: true });
   }
 
@@ -648,8 +673,9 @@ function removeQuickOp(uid, opId) {
 }
 /* ответ после записи: что записано и сколько осталось по категории */
 function doneText(uid, op, cat) {
-  if (op.income) return `✅ Доход ${rubFmt(op.amount)} записан`;
   const st = loadState(uid).state;
+  const rubFmt = (n) => money(n, st);
+  if (op.income) return `✅ Доход ${rubFmt(op.amount)} записан`;
   const month = op.date.slice(0, 7);
   const spent = st ? st.ops.filter((o) => o.type === 'expense' && o.catId === cat.id && o.date.slice(0, 7) === month).reduce((a, o) => a + o.amount, 0) : 0;
   let t = `✅ Записано: ${rubFmt(op.amount)} — ${cat.name}${op.note ? ' (' + op.note + ')' : ''}`;
@@ -665,7 +691,6 @@ function localDay(uid) {
   const pr = q.getPrefs.get(uid);
   return localParts(pr ? pr.tz : 180).day;
 }
-const rubFmt = (n) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₽';
 async function handleQuick(m, text) {
   const pq = parseQuick(text);
   if (!pq) return false;
@@ -695,39 +720,40 @@ async function handleQuick(m, text) {
   const rows = [];
   const cats = cur.state.cats.slice(0, 12);
   for (let i = 0; i < cats.length; i += 2) rows.push(cats.slice(i, i + 2).map((c) => ({ text: c.name.slice(0, 24), callback_data: `q|${key}|${c.id}` })));
-  await tgApi('sendMessage', { chat_id: m.chat.id, text: `${rubFmt(pq.amount)}${pq.note ? ' — ' + pq.note : ''}\nВ какую категорию записать?`, reply_markup: { inline_keyboard: rows } });
+  await tgApi('sendMessage', { chat_id: m.chat.id, text: `${money(pq.amount, cur.state)}${pq.note ? ' — ' + pq.note : ''}\nВ какую категорию записать?`, reply_markup: { inline_keyboard: rows } });
   return true;
 }
 /* Подписка в чате: цены и кнопки оформления; счёт открывается прямо в Telegram */
 const STAR_PLANS_ON = () => !!(BOT_TOKEN && BOT_NAME);
 function plansMessage(uid) {
-  const info = planInfo(uid), card = !!YK_TOKEN;
+  const info = planInfo(uid), card = !!YK_TOKEN, st = STAR_PLANS_ON();
+  const row = (name, rub, stars) => `• ${name} — ${rub} ₽` + (st ? ` (или ⭐ ${stars})` : '');
   const lines = [
     '⭐ Подписка Копилки',
     '',
     'Несколько целей, семейный бюджет, регулярные платежи, экспорт и напоминания.',
     '',
-    `• Месяц — ${info.priceMonth} ₽` + (STAR_PLANS_ON() ? ` (или ⭐ ${info.starsMonth})` : ''),
-    `• Год — ${info.priceYear} ₽` + (STAR_PLANS_ON() ? ` (или ⭐ ${info.starsYear})` : '') + ' — выгоднее',
+    row('Месяц', info.priceMonth, info.starsMonth),
+    row('Год', info.priceYear, info.starsYear) + ' — выгоднее',
+    row('Навсегда', info.priceLife, info.starsLife) + ' — разовый платёж',
     '',
     `Первые ${TRIAL_DAYS} дней бесплатно. Подписка включается сразу после оплаты.`,
   ];
   const kb = [];
-  if (card) kb.push([{ text: `Месяц — ${info.priceMonth} ₽`, callback_data: 'b|month|card' }, { text: `Год — ${info.priceYear} ₽`, callback_data: 'b|year|card' }]);
+  if (card) {
+    kb.push([{ text: `Месяц — ${info.priceMonth} ₽`, callback_data: 'b|month|card' }, { text: `Год — ${info.priceYear} ₽`, callback_data: 'b|year|card' }]);
+    kb.push([{ text: `Навсегда — ${info.priceLife} ₽`, callback_data: 'b|life|card' }]);
+  }
   kb.push([{ text: `⭐ Месяц — ${info.starsMonth}`, callback_data: 'b|month|stars' }, { text: `⭐ Год — ${info.starsYear}`, callback_data: 'b|year|stars' }]);
+  kb.push([{ text: `⭐ Навсегда — ${info.starsLife}`, callback_data: 'b|life|stars' }]);
   if (APP_URL) kb.push([{ text: 'Открыть Копилку', web_app: { url: APP_URL } }]);
   return { text: lines.join('\n'), reply_markup: { inline_keyboard: kb } };
 }
 async function sendPlanInvoice(chatId, uid, plan, method) {
-  const info = planInfo(uid), card = method === 'card' && !!YK_TOKEN;
-  const body = {
-    chat_id: chatId,
-    title: plan === 'year' ? 'Копилка на год' : 'Копилка на месяц',
-    description: plan === 'year' ? 'Подписка на 12 месяцев: несколько целей, семья, регулярные платежи, экспорт и напоминания' : 'Подписка на 30 дней: несколько целей, семья, регулярные платежи, экспорт и напоминания',
-    payload: plan + '|' + uid,
-  };
-  if (card) Object.assign(body, { provider_token: YK_TOKEN, currency: 'RUB', prices: [{ label: plan === 'year' ? 'Год' : 'Месяц', amount: (plan === 'year' ? info.priceYear : info.priceMonth) * 100 }] });
-  else Object.assign(body, { currency: 'XTR', prices: [{ label: plan === 'year' ? 'Год' : 'Месяц', amount: plan === 'year' ? info.starsYear : info.starsMonth }] });
+  const pm = planMeta(plan, planInfo(uid)), card = method === 'card' && !!YK_TOKEN;
+  const body = { chat_id: chatId, title: pm.title, description: pm.description, payload: plan + '|' + uid };
+  if (card) Object.assign(body, { provider_token: YK_TOKEN, currency: 'RUB', prices: [{ label: pm.label, amount: pm.rub * 100 }] });
+  else Object.assign(body, { currency: 'XTR', prices: [{ label: pm.label, amount: pm.stars }] });
   return tgApi('sendInvoice', body, 10000);
 }
 async function handleCallback(cb) {
@@ -737,7 +763,7 @@ async function handleCallback(cb) {
     await tgApi('sendMessage', { chat_id: cb.message.chat.id, ...plansMessage(cb.from.id) });
     return;
   }
-  if (parts[0] === 'b' && cb.message && (parts[1] === 'month' || parts[1] === 'year')) {
+  if (parts[0] === 'b' && cb.message && parsePlan(parts[1])) {
     await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
     await sendPlanInvoice(cb.message.chat.id, cb.from.id, parts[1], parts[2]).catch(() => {});
     return;
@@ -762,7 +788,7 @@ async function handleCallback(cb) {
 }
 /* Оплата звёздами: Telegram сначала спрашивает подтверждение, потом присылает successful_payment */
 function parsePayload(str) {
-  const m = String(str || '').match(/^(month|year)\|(\d{1,15})$/);
+  const m = String(str || '').match(/^(month|year|life)\|(\d{1,15})$/);
   return m ? { plan: m[1], uid: Number(m[2]) } : null;
 }
 async function handlePreCheckout(pq) {
@@ -770,7 +796,7 @@ async function handlePreCheckout(pq) {
   let good = !!(pl && pl.uid === pq.from.id);
   if (good && pq.currency === 'RUB') {
     const info = planInfo(pl.uid);
-    good = !!YK_TOKEN && Number(pq.total_amount) === (pl.plan === 'year' ? info.priceYear : info.priceMonth) * 100;
+    good = !!YK_TOKEN && Number(pq.total_amount) === planMeta(pl.plan, info).rub * 100;
   } else if (good) good = pq.currency === 'XTR';
   await tgApi('answerPreCheckoutQuery', good ? { pre_checkout_query_id: pq.id, ok: true } : { pre_checkout_query_id: pq.id, ok: false, error_message: 'Не удалось подтвердить оплату, попробуйте ещё раз' });
 }
@@ -782,13 +808,13 @@ async function handlePayment(m) {
     const ins = q.insPayment.run(String(sp.telegram_payment_charge_id), pl.uid, pl.plan, Number(sp.total_amount) || 0, Date.now());
     if (!ins.changes) return 0;   // этот платёж уже учтён
     const cur = q.premiumOf.get(pl.uid);
-    const end = Math.max(Date.now(), cur ? cur.until : 0) + (pl.plan === 'year' ? 365 : 30) * 86400000;
+    const end = pl.plan === 'life' ? LIFETIME_UNTIL : Math.max(Date.now(), cur ? cur.until : 0) + (pl.plan === 'year' ? 365 : 30) * 86400000;
     q.putPremium.run(pl.uid, end);
     return end;
   });
   if (!until) return;
   const d = new Date(until + 3 * 3600000), pad = (n) => String(n).padStart(2, '0');
-  await tgApi('sendMessage', { chat_id: m.chat.id, text: `✅ Оплата получена, спасибо! Подписка активна до ${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}.`, reply_markup: openButton() });
+  await tgApi('sendMessage', { chat_id: m.chat.id, text: pl.plan === 'life' ? '✅ Оплата получена, спасибо! Подписка активна навсегда 🎉' : `✅ Оплата получена, спасибо! Подписка активна до ${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}.`, reply_markup: openButton() });
 }
 async function handleUpdate(u) {
   if (u.pre_checkout_query) return handlePreCheckout(u.pre_checkout_query);
@@ -850,15 +876,17 @@ async function startBot() {
 
 /* ---------- Напоминания ---------- */
 function localParts(tzMin, shiftDays) {
-  const d = new Date(Date.now() + tzMin * 60000 - (shiftDays || 0) * 86400000);
+  const d = new Date((DEV && process.env.FAKE_NOW ? Number(process.env.FAKE_NOW) : Date.now()) + tzMin * 60000 - (shiftDays || 0) * 86400000);
   const pad = (n) => String(n).padStart(2, '0');
   return { day: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, hour: d.getUTCHours(), dow: d.getUTCDay() };
 }
-const rub = (n) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₽';
+const CUR_SYM = { RUB: '₽', USD: '$', EUR: '€', CNY: '¥', KZT: '₸', BYN: 'Br', UAH: '₴', GEL: '₾', TRY: '₺', AMD: '֏' };
+const money = (n, st) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ' + ((st && CUR_SYM[st.cur]) || '₽');
 function openButton() {
   return APP_URL ? { inline_keyboard: [[{ text: 'Открыть Копилку', web_app: { url: APP_URL } }]] } : undefined;
 }
 function weeklyText(st, tz) {
+  const rub = (n) => money(n, st);
   const days = new Set();
   for (let i = 1; i <= 7; i++) days.add(localParts(tz, i - 1).day);
   const cats = new Map(st.cats.map((c) => [c.id, c]));
@@ -880,12 +908,58 @@ function weeklyText(st, tz) {
   if (saved) t += `\nОтложено в цели: ${rub(saved)}`;
   return t;
 }
-async function sendReminders() {
+function pad2(n) { return String(n).padStart(2, '0'); }
+const MONTHS_RU = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+/* что нужно оплатить завтра: регулярные платежи и взносы по долгам */
+function dueTomorrow(st, tz) {
+  const t = localParts(tz, -1), y = +t.day.slice(0, 4), mo = +t.day.slice(5, 7), d = +t.day.slice(8, 10);
+  const key = t.day.slice(0, 7), last = new Date(Date.UTC(y, mo, 0)).getUTCDate(), items = [];
+  for (const r of st.recurring || []) {
+    if (r.from && r.from > key) continue;
+    if (Math.min(r.day, last) === d) items.push({ name: r.name, amount: r.amount });
+  }
+  for (const x of st.debts || []) {
+    if (x.kind === 'owed' || !(x.pay > 0)) continue;
+    const left = x.total - (x.payments || []).reduce((a, p) => a + p.amount, 0);
+    if (left <= 0 || (x.payments || []).some((p) => String(p.date).slice(0, 7) === key)) continue;
+    if (Math.min(x.day || 1, last) === d) items.push({ name: x.name, amount: Math.min(x.pay, left) });
+  }
+  return items;
+}
+function billsText(items, st) {
+  const total = items.reduce((a, i) => a + i.amount, 0);
+  return 'Завтра платежи 💳\n' + items.map((i) => `• ${i.name} — ${money(i.amount, st)}`).join('\n') + (items.length > 1 ? `\nИтого: ${money(total, st)}` : '');
+}
+/* итоги прошедшего месяца: присылаем 1-го числа */
+function monthlyText(st, tz) {
+  const lp = localParts(tz), y = +lp.day.slice(0, 4), mo = +lp.day.slice(5, 7);
+  const pY = mo === 1 ? y - 1 : y, pM = mo === 1 ? 12 : mo - 1, ppY = pM === 1 ? pY - 1 : pY, ppM = pM === 1 ? 12 : pM - 1;
+  const pk = `${pY}-${pad2(pM)}`, ppk = `${ppY}-${pad2(ppM)}`;
+  const cats = new Map(st.cats.map((c) => [c.id, c]));
+  let spent = 0, prev = 0, saved = 0; const byCat = new Map(), days = new Set();
+  for (const o of st.ops) {
+    if (o.type !== 'expense') continue;
+    const k = String(o.date).slice(0, 7);
+    if (k === pk) { spent += o.amount; byCat.set(o.catId, (byCat.get(o.catId) || 0) + o.amount); days.add(o.date); }
+    else if (k === ppk) prev += o.amount;
+  }
+  for (const g of st.goals || []) for (const c of g.contribs || []) if (String(c.date).slice(0, 7) === pk) saved += c.amount;
+  if (!spent && !saved) return null;
+  const dim = new Date(Date.UTC(pY, pM, 0)).getUTCDate();
+  let t = `Итоги: ${MONTHS_RU[pM - 1]} ${pY} 📊\nПотрачено: ${money(spent, st)}`;
+  if (prev > 0) { const diff = Math.round((spent - prev) / prev * 100); t += ` (${diff > 0 ? '+' : ''}${diff}% к прошлому месяцу)`; }
+  const top = [...byCat.entries()].sort((a, b) => b[1] - a[1])[0], c = top && cats.get(top[0]);
+  if (c) t += `\nБольше всего: ${c.emoji} ${c.name} — ${money(top[1], st)}`;
+  t += `\nДней без трат: ${dim - days.size} из ${dim}`;
+  if (saved) t += `\nОтложено в цели: ${money(saved, st)}`;
+  return t;
+}
+async function sendReminders(ignoreHour) {
   if (!BOT_NAME || !BOT_TOKEN) return;
   for (const r of q.remindList.all()) {
     try {
       const lp = localParts(r.tz);
-      if (lp.hour < r.hour || lp.hour > r.hour + 3) continue;
+      if (!ignoreHour && (lp.hour < r.hour || lp.hour > r.hour + 3)) continue;
       const st = loadState(r.user_id).state;
       if (!st) continue;
       if (r.remind && r.last_sent !== lp.day) {
@@ -896,12 +970,28 @@ async function sendReminders() {
           if (!resp.ok) q.markSent.run('', r.user_id);
         }
       }
+      if (r.bills && r.last_bills !== lp.day) {
+        q.markBills.run(lp.day, r.user_id);
+        const items = dueTomorrow(st, r.tz);
+        if (items.length) {
+          const resp = await tgApi('sendMessage', { chat_id: r.user_id, text: billsText(items, st), reply_markup: openButton() }, 10000);
+          if (!resp.ok) q.markBills.run('', r.user_id);
+        }
+      }
+      if (r.monthly && lp.day.slice(8, 10) === '01' && r.last_month !== lp.day) {
+        q.markMonth.run(lp.day, r.user_id);
+        const txt = monthlyText(st, r.tz);
+        if (txt) {
+          const resp = await tgApi('sendMessage', { chat_id: r.user_id, text: txt, reply_markup: openButton() }, 10000);
+          if (!resp.ok) q.markMonth.run('', r.user_id);
+        }
+      }
       if (r.weekly && lp.dow === 1 && r.last_week !== lp.day) {
         q.markWeek.run(lp.day, r.user_id);
         const resp = await tgApi('sendMessage', { chat_id: r.user_id, text: weeklyText(st, r.tz), reply_markup: openButton() }, 10000);
         if (!resp.ok) q.markWeek.run('', r.user_id);
       }
-    } catch (_) { q.markSent.run('', r.user_id); q.markWeek.run('', r.user_id); }
+    } catch (_) { q.markSent.run('', r.user_id); q.markWeek.run('', r.user_id); q.markBills.run('', r.user_id); q.markMonth.run('', r.user_id); }
   }
 }
 setInterval(() => { sendReminders().catch(() => {}); }, 10 * 60 * 1000).unref();
