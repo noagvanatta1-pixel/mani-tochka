@@ -577,13 +577,40 @@ function addQuickOp(uid, op) {
     const cur = loadState(uid);
     if (!cur.state) return false;     // человек ещё не открывал приложение
     const st = cur.state;
-    st.ops.push({ id: crypto.randomBytes(4).toString('hex'), type: op.income ? 'income' : 'expense', amount: op.amount,
+    const id = crypto.randomBytes(4).toString('hex');
+    st.ops.push({ id, type: op.income ? 'income' : 'expense', amount: op.amount,
       catId: op.income ? '' : op.catId, note: op.note || '', date: op.date, t: Date.now(), by: uid });
     const r = saveState(uid, { rev: cur.rev, state: st });
+    if (!r.conflict) return id;
+  }
+  return null;
+}
+function removeQuickOp(uid, opId) {
+  for (let i = 0; i < 4; i++) {
+    const cur = loadState(uid);
+    if (!cur.state) return false;
+    const n = cur.state.ops.length;
+    cur.state.ops = cur.state.ops.filter((o) => o.id !== opId);
+    if (cur.state.ops.length === n) return false;
+    const r = saveState(uid, { rev: cur.rev, state: cur.state });
     if (!r.conflict) return true;
   }
   return false;
 }
+/* ответ после записи: что записано и сколько осталось по категории */
+function doneText(uid, op, cat) {
+  if (op.income) return `✅ Доход ${rubFmt(op.amount)} записан`;
+  const st = loadState(uid).state;
+  const month = op.date.slice(0, 7);
+  const spent = st ? st.ops.filter((o) => o.type === 'expense' && o.catId === cat.id && o.date.slice(0, 7) === month).reduce((a, o) => a + o.amount, 0) : 0;
+  let t = `✅ Записано: ${rubFmt(op.amount)} — ${cat.name}${op.note ? ' (' + op.note + ')' : ''}`;
+  if (cat.limit > 0) {
+    const left = cat.limit - spent;
+    t += left >= 0 ? `\nОсталось по «${cat.name}» в этом месяце: ${rubFmt(left)}` : `\n⚠️ Лимит по «${cat.name}» превышен на ${rubFmt(-left)}`;
+  } else t += `\nВсего по «${cat.name}» за месяц: ${rubFmt(spent)}`;
+  return t;
+}
+const undoButton = (id) => ({ inline_keyboard: [[{ text: 'Отменить', callback_data: 'u|' + id }]] });
 const pendingQuick = new Map();   // короткий ключ -> { uid, op, exp }
 function localDay(uid) {
   const pr = q.getPrefs.get(uid);
@@ -602,15 +629,15 @@ async function handleQuick(m, text) {
   const date = localDay(uid);
   const op = { income: pq.income, amount: pq.amount, note: pq.note, date, catId: '' };
   if (pq.income) {
-    addQuickOp(uid, op);
-    await tgApi('sendMessage', { chat_id: m.chat.id, text: `✅ Доход ${rubFmt(pq.amount)} записан` });
+    const id = addQuickOp(uid, op);
+    await tgApi('sendMessage', { chat_id: m.chat.id, text: doneText(uid, op), reply_markup: id ? undoButton(id) : undefined });
     return true;
   }
   const cat = guessCat(cur.state.cats, pq.note);
   if (cat) {
     op.catId = cat.id;
-    addQuickOp(uid, op);
-    await tgApi('sendMessage', { chat_id: m.chat.id, text: `✅ ${rubFmt(pq.amount)} — ${cat.name}${pq.note ? ' (' + pq.note + ')' : ''}` });
+    const id = addQuickOp(uid, op);
+    await tgApi('sendMessage', { chat_id: m.chat.id, text: id ? doneText(uid, op, cat) : 'Не удалось записать, попробуйте ещё раз', reply_markup: id ? undoButton(id) : undefined });
     return true;
   }
   const key = crypto.randomBytes(4).toString('hex');
@@ -624,6 +651,12 @@ async function handleQuick(m, text) {
 }
 async function handleCallback(cb) {
   const parts = String(cb.data || '').split('|');
+  if (parts[0] === 'u' && cb.message) {
+    const done = removeQuickOp(cb.from.id, parts[1]);
+    await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: done ? 'Отменено' : 'Уже отменено или удалено' });
+    if (done) await tgApi('editMessageText', { chat_id: cb.message.chat.id, message_id: cb.message.message_id, text: '↩️ Запись отменена' });
+    return;
+  }
   if (parts[0] !== 'q' || !cb.message) return tgApi('answerCallbackQuery', { callback_query_id: cb.id });
   const pend = pendingQuick.get(parts[1]);
   if (!pend || pend.uid !== cb.from.id) return tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Время вышло, отправьте трату ещё раз' });
@@ -632,9 +665,9 @@ async function handleCallback(cb) {
   const cat = cur.state && cur.state.cats.find((c) => c.id === parts[2]);
   if (!cat) return tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Категория не найдена' });
   pend.op.catId = cat.id;
-  addQuickOp(pend.uid, pend.op);
-  await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Записано' });
-  await tgApi('editMessageText', { chat_id: cb.message.chat.id, message_id: cb.message.message_id, text: `✅ ${rubFmt(pend.op.amount)} — ${cat.name}` });
+  const nid = addQuickOp(pend.uid, pend.op);
+  await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: nid ? 'Записано' : 'Не удалось записать' });
+  if (nid) await tgApi('editMessageText', { chat_id: cb.message.chat.id, message_id: cb.message.message_id, text: doneText(pend.uid, pend.op, cat), reply_markup: undoButton(nid) });
 }
 async function handleUpdate(u) {
   if (u.callback_query) return handleCallback(u.callback_query);
