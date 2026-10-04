@@ -1007,8 +1007,8 @@ function vProf(){
     '<div class="ver">Копилка · ' + (ONLINE ? 'данные синхронизируются с сервером' : 'данные хранятся на этом устройстве') + '</div>';
 }
 function currencyCard(){
-  return '<div class="card set"><label style="margin-top:0">Валюта учёта</label><div class="chips">' + Object.keys(CURS).map(function(c){ return '<button class="chip ' + (baseCode() === c ? 'on' : '') + '" data-act="setcur" data-v="' + c + '">' + CURS[c][0] + ' ' + c + '</button>'; }).join('') + '</div>' +
-    '<div class="hi" style="margin:.7rem .25rem 0;font-size:.8rem;font-weight:600">Все суммы показываются в этой валюте. При записи расхода можно выбрать другую валюту, она пересчитается по курсу.</div></div>';
+  return '<div class="card set"><label style="margin-top:0">Валюта учёта</label><div class="chips">' + Object.keys(CURS).filter(function(c){ return ['RUB','USD','KZT','UAH'].indexOf(c) >= 0 || c === baseCode(); }).map(function(c){ return '<button class="chip ' + (baseCode() === c ? 'on' : '') + '" data-act="setcur" data-v="' + c + '">' + CURS[c][0] + ' ' + c + '</button>'; }).join('') + '</div>' +
+    '<div class="hi" style="margin:.7rem .25rem 0;font-size:.8rem;font-weight:600">Все суммы показываются в этой валюте. При смене валюты все записи пересчитаются по курсу ЦБ.</div></div>';
 }
 function vSet(){
   return '<div class="top"><div><div class="title">Настройки</div></div></div>' +
@@ -1045,7 +1045,8 @@ function recentChips(){
     return '<button class="chip" data-act="opfill" data-cat="'+o.catId+'" data-amt="'+o.amount+'" data-note="'+esc(o.note || '')+'">'+ci(c.emoji,'sm')+' '+esc(o.note || c.name)+' · '+fmt(o.amount)+'</button>'; }).join('') + '</div>';
 }
 var opCur = 'RUB';
-function curRow(){
+function curRow(){ return ""; }
+function curRowOld(){
   var b = baseCode(), list = [b].concat(['USD','EUR','CNY','KZT','TRY','GEL'].filter(function(c){ return c !== b; }));
   return '<div class="chips" id="f-cur" style="margin:.1rem 0 .2rem">' + list.map(function(c){ return '<button class="chip ' + (c === opCur ? 'on' : '') + '" data-act="opcur" data-v="' + c + '">' + CURS[c][0] + ' ' + c + '</button>'; }).join('') + '</div><div class="fx" id="f-fx" style="display:none"></div>';
 }
