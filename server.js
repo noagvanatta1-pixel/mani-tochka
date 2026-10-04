@@ -1,13 +1,13 @@
 'use strict';
 /*
-  Мани.точка — сервер.
+  Копилка — сервер.
 
   Без внешних зависимостей: только встроенные модули Node.js (нужен Node 22.13+).
   Что делает:
     1. раздаёт приложение (index.html);
     2. проверяет, что запрос пришёл из Telegram (подпись initData) и определяет пользователя;
     3. хранит данные каждого пользователя отдельно в SQLite;
-    4. отвечает в боте на /start кнопкой «Открыть Мани.точку».
+    4. отвечает в боте на /start кнопкой «Открыть Копилку».
 
   Переменные окружения:
     BOT_TOKEN   токен бота от @BotFather (обязательно)
@@ -305,12 +305,12 @@ async function handleUpdate(u) {
   const text = String(m.text || '').trim();
   const name = (m.from && m.from.first_name) || '';
   const msg = text.startsWith('/start')
-    ? `Привет${name ? ', ' + name : ''}! 👋\n\nЭто Мани.точка: считайте расходы, планируйте бюджет и копите на цели.\nНажмите кнопку ниже, чтобы открыть.`
-    : 'Нажмите кнопку ниже, чтобы открыть Мани.точку 👇';
+    ? `Привет${name ? ', ' + name : ''}! 👋\n\nЭто Копилка: считайте расходы, планируйте бюджет и копите на цели.\nНажмите кнопку ниже, чтобы открыть.`
+    : 'Нажмите кнопку ниже, чтобы открыть Копилку 👇';
   await tgApi('sendMessage', {
     chat_id: m.chat.id,
     text: msg,
-    reply_markup: { inline_keyboard: [[{ text: 'Открыть Мани.точку', web_app: { url: APP_URL } }]] },
+    reply_markup: { inline_keyboard: [[{ text: 'Открыть Копилку', web_app: { url: APP_URL } }]] },
   });
 }
 
@@ -323,7 +323,7 @@ async function startBot() {
     if (!APP_URL) { console.warn('Бот: не задан APP_URL — кнопка открытия приложения не настроена.'); return; }
     await tgApi('deleteWebhook');
     await tgApi('setChatMenuButton', { menu_button: { type: 'web_app', text: 'Открыть', web_app: { url: APP_URL } } });
-    await tgApi('setMyCommands', { commands: [{ command: 'start', description: 'Открыть Мани.точку' }] });
+    await tgApi('setMyCommands', { commands: [{ command: 'start', description: 'Открыть Копилку' }] });
   } catch (e) {
     console.error('Бот: не удалось подключиться к Telegram:', e.message);
     return;
@@ -345,7 +345,7 @@ async function startBot() {
 
 /* ---------- Запуск ---------- */
 server.listen(PORT, () => {
-  console.log(`Мани.точка запущена на порту ${PORT}. Данные: ${DATA_DIR}`);
+  console.log(`Копилка запущена на порту ${PORT}. Данные: ${DATA_DIR}`);
   if (BOT_TOKEN && process.env.DISABLE_BOT !== '1') startBot();
 });
 
