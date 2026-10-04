@@ -170,6 +170,18 @@ input.f:focus,.panel input:focus{border-color:var(--pink)}
 .th.on{border-color:var(--pink-d)}
 .th i{width:2.875rem;height:2.875rem;border-radius:50%;display:block;box-shadow:0 0.25rem 0.625rem rgba(0,0,0,.14)}
 #toast{position:fixed;left:50%;bottom:calc(var(--nav) + 6.25rem);transform:translateX(-50%) translateY(1.25rem);background:var(--toast);color:#fff;padding:0.75rem 1.25rem;border-radius:1.25rem;font-weight:700;opacity:0;pointer-events:none;transition:.25s;z-index:60;max-width:88vw;text-align:center}
+#snack{position:fixed;left:1rem;right:1rem;bottom:calc(var(--nav) + 6.25rem);z-index:62;display:flex;align-items:center;gap:.75rem;padding:.6rem .6rem .6rem 1.1rem;border-radius:1.5rem;background:var(--toast);color:#fff;font-weight:700;opacity:0;transform:translateY(1rem);pointer-events:none;transition:.25s}
+#snack.on{opacity:1;transform:none;pointer-events:auto}
+#snack .st{flex:1;min-width:0;font-size:.95rem}
+#snack .und{display:flex;align-items:center;gap:.5rem;padding:.3rem .8rem .3rem .3rem;border-radius:1.5rem;background:rgba(255,255,255,.16);color:#fff;font-weight:800;font-size:.95rem}
+#snack .ring{position:relative;width:2.1rem;height:2.1rem;flex:none}
+#snack .ring svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+#snack .ring circle{fill:none;stroke-width:3.2}
+#snack .ring .bg{stroke:rgba(255,255,255,.25)}
+#snack .ring .fg{stroke:#fff;stroke-linecap:round;stroke-dasharray:94.25;stroke-dashoffset:0;animation:snackring var(--sd,5s) linear forwards}
+#snack .ring b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.85rem}
+@keyframes snackring{to{stroke-dashoffset:94.25}}
+@media (prefers-reduced-motion:reduce){#snack{transition:none}}
 #toast.on{opacity:1;transform:translateX(-50%)}
 .seg.scope{margin:0 0 .9rem}
 .warnbox{background:var(--dangerbg);color:var(--red);border-radius:1.25rem;padding:.8rem 1rem;margin-bottom:.9rem;font-weight:700;font-size:.9375rem}
@@ -334,6 +346,7 @@ input.f,.panel input{border-radius:.875rem;border-width:1.5px;border-color:var(-
 <nav class="nav" id="nav"></nav>
 <div id="sheet"></div>
 <div id="toast"></div>
+<div id="snack"></div>
 <input type="file" id="file" accept="image/*" hidden>
 
 <script>
@@ -595,6 +608,17 @@ var userName = function(){ return P().name || tgName || ''; };
 
 /* ---------- UI helpers ---------- */
 var toastT;
+var UNDO_MS = 5000, snackT = null, snackI = null, undoFn = null;
+function hideUndo(){ clearTimeout(snackT); clearInterval(snackI); undoFn = null; var e = $('#snack'); if (e) e.classList.remove('on'); }
+function showUndo(text, fn){
+  hideUndo(); undoFn = fn;
+  var e = $('#snack'), sec = Math.round(UNDO_MS / 1000);
+  e.style.setProperty('--sd', UNDO_MS + 'ms');
+  e.innerHTML = '<span class="st">' + esc(text) + '</span><button class="und" data-act="undo" aria-label="Отменить"><span class="ring"><svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="15"/><circle class="fg" cx="18" cy="18" r="15"/></svg><b>' + sec + '</b></span>Отменить</button>';
+  void e.offsetHeight; e.classList.add('on');
+  var left = sec; snackI = setInterval(function(){ left--; var b = e.querySelector('.ring b'); if (b && left > 0) b.textContent = left; }, 1000);
+  snackT = setTimeout(hideUndo, UNDO_MS);
+}
 function toast(msg){ var t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(function(){ t.classList.remove('on'); }, 2200); }
 function fitSheet(){
   var el = $('#sheet'), vv = window.visualViewport;
@@ -810,18 +834,24 @@ function vHome(){
   h += '<div class="plan slim" data-act="plan">'+ic('calc',20)+'<b>Спланировать бюджет</b><span>›</span></div>';
   h += '<div class="sec"><h2>Категории</h2></div>';
   h += S.cats.length ? S.cats.map(function(c){ return catCard(c, k); }).join('') : '<div class="card empty">Категорий пока нет. Откройте «Спланировать бюджет» и добавьте их.</div>';
-  return h;
+  return h + recentOps(k);
 }
 
-function opsCard(k){
-  var h = '<div class="sec"><h2>История операций</h2></div><div class="card">';
-  var ops = opsOf(k).slice().sort(function(a,b){ return a.date === b.date ? b.t - a.t : (a.date < b.date ? 1 : -1); }).slice(0, 30);
-  h += ops.length ? ops.map(function(o){
+function opRow(o){
     var c = catById(o.catId), em = ci(o.type === 'income' ? '💰' : (c ? c.emoji : '•'));
     var title = o.note || (o.type === 'income' ? 'Доход' : (c ? c.name : 'Без категории'));
     var d = o.date.slice(8,10) + '.' + o.date.slice(5,7);
     return '<div class="op" data-act="delop" data-id="'+o.id+'"><div class="em">'+em+'</div><div class="m"><b>'+esc(title)+'</b><span>'+d+(o.note && c ? ' · '+esc(c.name) : '')+(o.fc ? ' · '+fmtc(o.fc.a, o.fc.c) : '')+authorTag(o)+'</span></div><div class="a '+(o.type === 'income' ? 'in' : '')+'">'+(o.type === 'income' ? '+' : '−')+fmt(o.amount)+'</div></div>';
-  }).join('') + '<div class="empty" style="padding-bottom:0.25rem;font-size:0.8125rem">Нажмите на операцию, чтобы удалить</div>' : '<div class="empty">В этом месяце операций пока нет</div>';
+}
+function recentOps(k){
+  var ops = opsOf(k).slice().sort(function(a,b){ return a.date === b.date ? b.t - a.t : (a.date < b.date ? 1 : -1); }).slice(0, 5);
+  if (!ops.length) return '';
+  return '<div class="sec"><h2>Последние операции</h2></div><div class="card">' + ops.map(opRow).join('') + '<div class="empty" style="padding-bottom:0.25rem;font-size:0.8125rem">Нажмите на операцию, чтобы удалить</div></div>';
+}
+function opsCard(k){
+  var h = '<div class="sec"><h2>История операций</h2></div><div class="card">';
+  var ops = opsOf(k).slice().sort(function(a,b){ return a.date === b.date ? b.t - a.t : (a.date < b.date ? 1 : -1); }).slice(0, 30);
+  h += ops.length ? ops.map(opRow  ).join('') + '<div class="empty" style="padding-bottom:0.25rem;font-size:0.8125rem">Нажмите на операцию, чтобы удалить</div>' : '<div class="empty">В этом месяце операций пока нет</div>';
   return h + '</div>';
 }
 
@@ -1240,6 +1270,7 @@ var ACT = {
   mgo: function(d){ VM.y = +d.y; VM.m = +d.m; closeSheet(); render(); },
   addop: function(){ openOp(); },
   catadd: function(d){ openOp(d.id); },
+  undo: function(){ var f = undoFn; hideUndo(); if (f) f(); },
   plan: function(){ backToPlan = false; openPlan(); },
   newcat: function(){ commitPlan(); backToPlan = true; openCat(); },
   editcat: function(d){ commitPlan(); backToPlan = true; openCat(d.id); },
@@ -1257,7 +1288,7 @@ var ACT = {
   },
   photo: function(d){ pendingGoal = d.id; $('#file').click(); },
   delop: function(d){
-    confirmBox('Удалить эту операцию?', function(){ S.ops = S.ops.filter(function(o){ return o.id !== d.id; }); save(); render(); });
+    confirmBox('Удалить эту операцию?', function(){ var gone = S.ops.filter(function(o){ return o.id === d.id; })[0]; S.ops = S.ops.filter(function(o){ return o.id !== d.id; }); save(); render(); if (gone) showUndo('Операция удалена', function(){ S.ops.push(gone); save(); render(); toast('Возвращено'); }); });
   },
   optype: function(d, el){
     opType = d.v;
@@ -1308,7 +1339,8 @@ var ACT = {
     S.ops.push(nop);
     save(); closeSheet(); haptic('medium');
     var ok = date.slice(0,7); var p = ok.split('-'); VM.y = +p[0]; VM.m = +p[1] - 1;
-    render(); toast(limitMsg || (opType === 'expense' ? 'Расход добавлен' : 'Доход добавлен'));
+    render();
+    showUndo((limitMsg ? limitMsg + ' · ' : '') + (nop.type === 'expense' ? 'Расход добавлен' : 'Доход добавлен'), function(){ S.ops = S.ops.filter(function(o){ return o.id !== nop.id; }); save(); render(); toast('Отменено'); });
   },
   saveplan: function(){
     S.income[curKey()] = num($('#p-inc').value);
