@@ -83,6 +83,11 @@ systemctl restart mani
 
 echo "==> HTTPS (Caddy)"
 cat > /etc/caddy/Caddyfile <<CADDY
+{
+    servers {
+        protocols h1 h2
+    }
+}
 $DOMAIN {
     encode gzip
     reverse_proxy 127.0.0.1:3000
