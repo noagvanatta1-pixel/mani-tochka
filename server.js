@@ -75,6 +75,10 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS payments (
     charge_id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, plan TEXT NOT NULL, stars INTEGER NOT NULL, created_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS yk_pay (
+    id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, plan TEXT NOT NULL, amount INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS images (
     user_id INTEGER NOT NULL, goal_id TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, goal_id)
@@ -111,6 +115,11 @@ const q = {
   setCode: db.prepare('UPDATE families SET code = ? WHERE id = ?'),
   delFam: db.prepare('DELETE FROM families WHERE id = ?'),
   premiumOf: db.prepare('SELECT until FROM premium WHERE user_id = ?'),
+  ykIns: db.prepare('INSERT INTO yk_pay (id, user_id, plan, amount, status, created_at) VALUES (?, ?, ?, ?, \'pending\', ?)'),
+  ykGet: db.prepare('SELECT * FROM yk_pay WHERE id = ?'),
+  ykSet: db.prepare('UPDATE yk_pay SET status = ? WHERE id = ?'),
+  ykPending: db.prepare('SELECT id FROM yk_pay WHERE status = \'pending\' AND created_at > ?'),
+  ykExpire: db.prepare('UPDATE yk_pay SET status = \'expired\' WHERE status = \'pending\' AND created_at <= ?'),
   insPayment: db.prepare('INSERT OR IGNORE INTO payments (charge_id, user_id, plan, stars, created_at) VALUES (?, ?, ?, ?, ?)'),
   userCreated: db.prepare('SELECT created_at FROM users WHERE id = ?'),
   putPremium: db.prepare(`INSERT INTO premium (user_id, until) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET until = excluded.until`),
@@ -150,6 +159,11 @@ const STARS_YEAR = Number(process.env.STARS_YEAR) || 600;
 const STARS_LIFE = Number(process.env.STARS_LIFE) || 1500;
 /* Оплата картой/СБП через ЮKassa в Telegram: платёжный токен из @BotFather (Payments → ЮKassa) */
 const YK_TOKEN = process.env.YK_TOKEN || '';
+/* Оплата СБП / T-Pay / картой на странице ЮKassa (прямое подключение по API): shopId и секретный ключ из кабинета */
+const YK_SHOP_ID = process.env.YK_SHOP_ID || '';
+const YK_SECRET = process.env.YK_SECRET || '';
+const YK_API = (process.env.YK_API_BASE || 'https://api.yookassa.ru/v3').replace(/\/+$/, '');
+const YK_ON = !!(YK_SHOP_ID && YK_SECRET);
 const PAY_SECRET = process.env.PAY_SECRET || '';                 // секрет для уведомлений об оплате
 const FAMILY_PAID = process.env.FAMILY_PAID === '1';   // 1 = семью создаёт только подписчик
 
@@ -344,7 +358,7 @@ function planInfo(uid) {
     priceMonth: Math.round(PRICE_MONTH * k), priceYear: Math.round(PRICE_YEAR * k), priceLife: Math.round(PRICE_LIFE * k),
     fullMonth: PRICE_MONTH, fullYear: PRICE_YEAR, fullLife: PRICE_LIFE, discount: disc,
     pay: PAY_URL ? PAY_URL.replace('{uid}', String(uid)) : '', support: SUPPORT_TG,
-    card: !!(BOT_TOKEN && BOT_NAME && YK_TOKEN), stars: !!(BOT_TOKEN && BOT_NAME), starsMonth: Math.round(STARS_MONTH * k), starsYear: Math.round(STARS_YEAR * k), starsLife: Math.round(STARS_LIFE * k),
+    card: !!(BOT_TOKEN && BOT_NAME && YK_TOKEN), sbp: YK_ON, stars: !!(BOT_TOKEN && BOT_NAME), starsMonth: Math.round(STARS_MONTH * k), starsYear: Math.round(STARS_YEAR * k), starsLife: Math.round(STARS_LIFE * k),
   };
 }
 function grantPremium(uid, days) {
@@ -412,6 +426,13 @@ const IMG_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 let BOT_NAME = process.env.BOT_USERNAME || '';
 
 async function handleApi(req, res, url) {
+  if (url.pathname === '/api/yk/webhook' && req.method === 'POST') {
+    /* уведомление ЮKassa: ему не верим на слово, а перепроверяем платёж запросом в ЮKassa */
+    const body = await readJson(req, 16384).catch(() => null);
+    const id = body && body.object && typeof body.object.id === 'string' ? body.object.id : '';
+    if (id && YK_ON) await ykCheck(id).catch((e) => console.error('ЮKassa webhook:', e.message));
+    return json(res, 200, { ok: true });
+  }
   const user = authenticate(req);
   rateLimit(user.id);
   const p = url.pathname, m = req.method;
@@ -444,6 +465,25 @@ async function handleApi(req, res, url) {
     }, 10000).catch(() => null);
     if (!r || !r.ok || typeof r.result !== 'string') throw httpError(502, 'telegram error');
     return json(res, 200, { link: r.result, rub: pm.rub });
+  }
+
+  if (p === '/api/pay/sbp' && m === 'POST') {
+    const body = await readJson(req, 1024);
+    const plan = parsePlan(body && body.plan);
+    if (!plan) throw httpError(400, 'bad plan');
+    if (!YK_ON) throw httpError(503, 'sbp unavailable');
+    touch(user);
+    const pm = planMeta(plan, planInfo(user.id));
+    const r = await ykApi('POST', '/payments', {
+      amount: { value: pm.rub + '.00', currency: 'RUB' }, capture: true,
+      confirmation: { type: 'redirect', return_url: BOT_NAME ? 'https://t.me/' + BOT_NAME : (APP_URL || 'https://t.me') },
+      description: (pm.title + ' (id ' + user.id + ')').slice(0, 128),
+      metadata: { uid: String(user.id), plan },
+    }, crypto.randomUUID()).catch((e) => { console.error('ЮKassa: создание платежа:', e.message); return null; });
+    const link = r && r.confirmation && r.confirmation.confirmation_url;
+    if (!r || !r.id || !link) throw httpError(502, 'yookassa error');
+    q.ykIns.run(String(r.id), user.id, plan, pm.rub, Date.now());
+    return json(res, 200, { url: link, rub: pm.rub });
   }
 
   if (DEV && p === '/api/dev/reminders' && m === 'POST') { await sendReminders(true); return json(res, 200, { ok: true }); }
@@ -800,21 +840,59 @@ async function handlePreCheckout(pq) {
   } else if (good) good = pq.currency === 'XTR';
   await tgApi('answerPreCheckoutQuery', good ? { pre_checkout_query_id: pq.id, ok: true } : { pre_checkout_query_id: pq.id, ok: false, error_message: 'Не удалось подтвердить оплату, попробуйте ещё раз' });
 }
+/* запись о платеже и продление подписки — одной операцией: либо оба, либо ни одного */
+function applyPlanPayment(uid, plan, chargeId, amount) {
+  return tx(() => {
+    const ins = q.insPayment.run(String(chargeId), uid, plan, Number(amount) || 0, Date.now());
+    if (!ins.changes) return 0;   // этот платёж уже учтён
+    const cur = q.premiumOf.get(uid);
+    const end = plan === 'life' ? LIFETIME_UNTIL : Math.max(Date.now(), cur ? cur.until : 0) + (plan === 'year' ? 365 : 30) * 86400000;
+    q.putPremium.run(uid, end);
+    return end;
+  });
+}
+function paidText(plan, until) {
+  const d = new Date(until + 3 * 3600000), pad = (n) => String(n).padStart(2, '0');
+  return plan === 'life' ? '✅ Оплата получена, спасибо! Подписка активна навсегда 🎉' : `✅ Оплата получена, спасибо! Подписка активна до ${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}.`;
+}
 async function handlePayment(m) {
   const sp = m.successful_payment, pl = parsePayload(sp.invoice_payload);
   if (!pl || pl.uid !== m.from.id) { console.error('Оплата: неожиданные данные', sp.telegram_payment_charge_id); return; }
-  /* запись о платеже и продление подписки — одной операцией: либо оба, либо ни одного */
-  const until = tx(() => {
-    const ins = q.insPayment.run(String(sp.telegram_payment_charge_id), pl.uid, pl.plan, Number(sp.total_amount) || 0, Date.now());
-    if (!ins.changes) return 0;   // этот платёж уже учтён
-    const cur = q.premiumOf.get(pl.uid);
-    const end = pl.plan === 'life' ? LIFETIME_UNTIL : Math.max(Date.now(), cur ? cur.until : 0) + (pl.plan === 'year' ? 365 : 30) * 86400000;
-    q.putPremium.run(pl.uid, end);
-    return end;
-  });
+  const until = applyPlanPayment(pl.uid, pl.plan, sp.telegram_payment_charge_id, sp.total_amount);
   if (!until) return;
-  const d = new Date(until + 3 * 3600000), pad = (n) => String(n).padStart(2, '0');
-  await tgApi('sendMessage', { chat_id: m.chat.id, text: pl.plan === 'life' ? '✅ Оплата получена, спасибо! Подписка активна навсегда 🎉' : `✅ Оплата получена, спасибо! Подписка активна до ${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}.`, reply_markup: openButton() });
+  await tgApi('sendMessage', { chat_id: m.chat.id, text: paidText(pl.plan, until), reply_markup: openButton() });
+}
+/* ЮKassa по API: запрос в ЮKassa и проверка платежа */
+async function ykApi(method, path, body, idem) {
+  const headers = { Authorization: 'Basic ' + Buffer.from(YK_SHOP_ID + ':' + YK_SECRET).toString('base64'), 'Content-Type': 'application/json' };
+  if (idem) headers['Idempotence-Key'] = idem;
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 10000);
+  try {
+    const r = await fetch(YK_API + path, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: ctl.signal });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error('HTTP ' + r.status + (j && j.description ? ' ' + j.description : ''));
+    return j;
+  } finally { clearTimeout(tm); }
+}
+async function ykCheck(id) {
+  const row = q.ykGet.get(id);
+  if (!row || row.status !== 'pending') return;
+  const r = await ykApi('GET', '/payments/' + encodeURIComponent(id));
+  if (r.status === 'canceled') { q.ykSet.run('canceled', id); return; }
+  if (r.status !== 'succeeded' || r.paid !== true) return;
+  if (!r.amount || r.amount.currency !== 'RUB' || Number(r.amount.value) !== row.amount) { console.error('ЮKassa: сумма не совпала', id); q.ykSet.run('mismatch', id); return; }
+  const until = applyPlanPayment(row.user_id, row.plan, 'yk:' + id, row.amount);
+  q.ykSet.run('done', id);
+  if (until) await tgApi('sendMessage', { chat_id: row.user_id, text: paidText(row.plan, until), reply_markup: openButton() }).catch(() => {});
+}
+function startYkPolling() {
+  if (!YK_ON) return;
+  setInterval(async () => {
+    try {
+      q.ykExpire.run(Date.now() - 3 * 3600000);
+      for (const r of q.ykPending.all(Date.now() - 3 * 3600000)) await ykCheck(r.id).catch((e) => console.error('ЮKassa:', e.message));
+    } catch (e) { console.error('ЮKassa:', e.message); }
+  }, 8000).unref();
 }
 async function handleUpdate(u) {
   if (u.pre_checkout_query) return handlePreCheckout(u.pre_checkout_query);
@@ -1000,6 +1078,7 @@ setInterval(() => { sendReminders().catch(() => {}); }, 10 * 60 * 1000).unref();
 server.listen(PORT, () => {
   console.log(`Копилка запущена на порту ${PORT}. Данные: ${DATA_DIR}`);
   if (BOT_TOKEN && process.env.DISABLE_BOT !== '1') startBot();
+  startYkPolling();
 });
 
 function shutdown() {

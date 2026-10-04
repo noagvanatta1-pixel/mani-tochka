@@ -1539,15 +1539,19 @@ function openLink(u){ try { if (tg && tg.openLink) { tg.openLink(u); return; } }
 function openTg(u){ try { if (tg && tg.openTelegramLink) { tg.openTelegramLink(u); return; } } catch(e){} window.open(u, '_blank'); }
 function dmy(ts){ var d = new Date(ts); return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear(); }
 var PAYM = '';
-function payMethod(){ if (!PLAN) return ''; if (PAYM === 'card' && PLAN.card) return 'card'; if (PAYM === 'stars' && PLAN.stars) return 'stars'; return PLAN.card ? 'card' : (PLAN.stars ? 'stars' : ''); }
+function payMethod(){ if (!PLAN) return ''; if (PAYM === 'card' && PLAN.card) return 'card'; if (PAYM === 'sbp' && PLAN.sbp) return 'sbp'; if (PAYM === 'stars' && PLAN.stars) return 'stars'; return PLAN.card ? 'card' : (PLAN.sbp ? 'sbp' : (PLAN.stars ? 'stars' : '')); }
 function priceBtns(){
   if (!PLAN) return '';
   var pm = payMethod();
   if (pm) {
     var disc = PLAN.discount > 0 ? '<div class="hi" style="margin:0 .25rem .6rem;font-weight:600">Ваша скидка за друзей: <b style="color:var(--ink)">' + PLAN.discount + '%</b></div>' : '';
-    var seg = (PLAN.card && PLAN.stars) ? '<div class="seg" style="margin-bottom:.75rem"><button class="' + (pm === 'card' ? 'on' : '') + '" data-act="paym" data-v="card">Картой · СБП</button><button class="' + (pm === 'stars' ? 'on' : '') + '" data-act="paym" data-v="stars">⭐ Звёзды</button></div>' : '';
+    var meths = [];
+    if (PLAN.card) meths.push(['card', PLAN.sbp ? 'Картой' : 'Картой · ЮMoney']);
+    if (PLAN.sbp) meths.push(['sbp', 'СБП · T-Pay']);
+    if (PLAN.stars) meths.push(['stars', '⭐ Звёзды']);
+    var seg = meths.length > 1 ? '<div class="seg" style="margin-bottom:.75rem">' + meths.map(function(x){ return '<button class="' + (pm === x[0] ? 'on' : '') + '" data-act="paym" data-v="' + x[0] + '"' + (meths.length > 2 ? ' style="padding:.75rem .3rem;font-size:.95rem"' : '') + '>' + x[1] + '</button>'; }).join('') + '</div>' : '';
     var lm, ly, ll, sv, note;
-    if (pm === 'card') { lm = fmt(PLAN.priceMonth); ly = fmt(PLAN.priceYear); ll = fmt(PLAN.priceLife); sv = Math.round((1 - PLAN.priceYear / (PLAN.priceMonth * 12)) * 100); note = 'Оплата картой или через СБП, безопасно через ЮKassa прямо в Telegram.'; }
+    if (pm === 'card' || pm === 'sbp') { lm = fmt(PLAN.priceMonth); ly = fmt(PLAN.priceYear); ll = fmt(PLAN.priceLife); sv = Math.round((1 - PLAN.priceYear / (PLAN.priceMonth * 12)) * 100); note = pm === 'sbp' ? 'Откроется страница ЮKassa: СБП, T-Pay, карта или SberPay. После оплаты вернитесь в Копилку.' : (PLAN.sbp ? 'Оплата картой, ЮMoney или SberPay прямо в Telegram, безопасно через ЮKassa.' : 'Оплата картой, ЮMoney или SberPay, безопасно через ЮKassa прямо в Telegram.'); }
     else { lm = '⭐ ' + PLAN.starsMonth; ly = '⭐ ' + PLAN.starsYear; ll = '⭐ ' + PLAN.starsLife; sv = Math.round((1 - PLAN.starsYear / (PLAN.starsMonth * 12)) * 100); note = 'Оплата звёздами Telegram. Звёзды покупаются прямо в Telegram.'; }
     return disc + seg +
       '<button class="btn" data-act="pay" data-v="year" style="margin-bottom:.5rem">Год — ' + ly + (sv > 0 ? ' · выгоднее на ' + sv + '%' : '') + '</button>' +
@@ -1568,15 +1572,25 @@ function priceBtns(){
     '<button class="btn" data-act="pay" data-v="year" style="margin-bottom:.5rem">Год — ' + fmt(y) + old(y, PLAN.fullYear) + (save > 0 ? ' · выгоднее на ' + save + '%' : '') + '</button>' +
     '<button class="btn ghost" data-act="pay" data-v="month">Месяц — ' + fmt(m) + old(m, PLAN.fullMonth) + '</button>';
 }
-function refreshPlan(tries){
+function refreshPlan(tries, quiet){
   api('GET', '/api/plan').then(function(r){
     PLAN = r;
-    if (r.status === 'premium') { closeSheet(); render(); toast('Подписка активна. Спасибо!'); }
-    else if (tries > 0) setTimeout(function(){ refreshPlan(tries - 1); }, 1500);
-    else toast('Оплата принята, подписка включится через минуту');
+    if (r.status === 'premium') { PAY_WAIT = false; closeSheet(); render(); toast('Подписка активна. Спасибо!'); }
+    else if (tries > 0) setTimeout(function(){ refreshPlan(tries - 1, quiet); }, quiet ? 3000 : 1500);
+    else if (!quiet) toast('Оплата принята, подписка включится через минуту');
   }).catch(function(){});
 }
+var PAY_WAIT = false;
 function payInvoice(plan, method){
+  if (method === 'sbp') {
+    api('POST', '/api/pay/sbp', {plan: plan}).then(function(r){
+      PAY_WAIT = true;
+      if (tg && tg.openLink) tg.openLink(r.url); else window.open(r.url, '_blank');
+      toast('Оплатите на странице ЮKassa и вернитесь сюда');
+      setTimeout(function(){ refreshPlan(40, true); }, 8000);
+    }).catch(function(){ toast('Не удалось создать платёж. Попробуйте позже'); });
+    return;
+  }
   api('POST', method === 'card' ? '/api/pay/card' : '/api/pay/stars', {plan: plan}).then(function(r){
     if (tg && tg.openInvoice) {
       tg.openInvoice(r.link, function(st){
@@ -1586,6 +1600,7 @@ function payInvoice(plan, method){
     } else openTg(r.link);
   }).catch(function(){ toast('Не удалось создать счёт. Попробуйте позже'); });
 }
+document.addEventListener('visibilitychange', function(){ if (!document.hidden && PAY_WAIT && ONLINE) refreshPlan(10, true); });
 function planCard(){
   if (!ONLINE || !PLAN || (!PLAN.paywall && PLAN.status !== 'premium')) return '';
   var t, extra = '';
