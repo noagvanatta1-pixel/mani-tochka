@@ -254,6 +254,28 @@ input.f,.panel input{border-radius:.875rem;border-width:1.5px;border-color:var(-
 #toast{border-radius:.875rem}
 .warnbox,.tog button,.rec{border-radius:.75rem}
 .ib{border-radius:.75rem;background:rgba(255,255,255,.92)}
+
+/* спокойная главная */
+.cat .h{margin-bottom:.625rem;gap:.75rem}.cat .h:last-child{margin-bottom:0}
+.cat{padding:.75rem .875rem;margin-bottom:.5rem;cursor:pointer}
+.cat .mid,.gmini .mid{flex:1;min-width:0}
+.cat .nm{font-size:1.0625rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cat .sub,.gmini .sub{font-size:.8125rem;font-weight:500;color:var(--muted);margin-top:.0625rem}
+.cat .sub.neg{color:var(--red)}
+.cat .amt{font-family:var(--fd);font-size:1rem;font-weight:500;margin:0}
+.cat .bar,.gmini .bar{margin:0}
+.cat .em{width:auto}
+.gmini{padding:.875rem}
+.gmini .h{display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem}
+.gmini .gname{font-size:1.125rem;font-weight:700}
+.gmini .sub b{color:var(--ink);font-weight:600}
+.gth{width:2.875rem;height:2.875rem;border-radius:.9375rem;overflow:hidden;flex:none}
+.gth img{width:100%;height:100%;object-fit:cover;display:block}
+.gadd{flex:none;width:2.5rem;height:2.5rem;border-radius:.8125rem;background:var(--btn);color:#fff;display:flex;align-items:center;justify-content:center}
+.plan.slim{display:flex;align-items:center;gap:.625rem;padding:.75rem .25rem .25rem;margin:.25rem 0 0;color:var(--pink-d);cursor:pointer}
+.plan.slim b{font-size:.9375rem;font-weight:600;flex:1}
+.plan.slim span{font-size:1.25rem;color:var(--muted)}
+.sec{margin-top:1.125rem}
 </style>
 </head>
 <body>
@@ -594,25 +616,30 @@ function catCard(c, k){
   var list = catOps(k, c.id), sp = sum(list.map(function(o){ return o.amount; }));
   var left = c.limit - sp, over = sp > c.limit;
   var w = c.limit > 0 ? Math.min(100, sp / c.limit * 100) : (sp > 0 ? 100 : 0);
-  var dl = daysLeft();
-  return '<div class="card cat"><div class="h"><div class="em">'+ci(c.emoji,'lg')+'</div><div class="nm">'+esc(c.name)+'</div>' +
-    '<button class="edit" data-act="editcat" data-id="'+c.id+'" aria-label="Изменить">'+ic('pencil',22)+'</button></div>' +
-    '<div class="amt">'+fmt(sp)+' <small>/ '+fmt(c.limit)+'</small> <em class="'+(over ? 'neg' : '')+'">· '+(over ? 'перерасход '+fmt(-left) : 'осталось '+fmt(left))+'</em></div>' +
-    '<div class="bar '+(over ? 'over' : '')+'"><i style="width:'+w+'%"></i></div>' +
-    '<div class="foot"><span>'+list.length+' '+plural(list.length, ['операция','операции','операций'])+'</span><span>'+(dl != null ? 'осталось '+dl+' '+plural(dl, ['день','дня','дней']) : '')+'</span></div></div>';
+  var sub = c.limit > 0 ? (over ? 'перерасход '+fmt(-left) : 'осталось '+fmt(left)) : (sp > 0 ? 'без лимита' : 'нет лимита');
+  return '<div class="card cat" data-act="editcat" data-id="'+c.id+'"><div class="h"><div class="em">'+ci(c.emoji)+'</div>' +
+    '<div class="mid"><div class="nm">'+esc(c.name)+'</div><div class="sub '+(over ? 'neg' : '')+'">'+sub+'</div></div>' +
+    '<div class="amt">'+fmt(sp)+'</div></div>' +
+    (c.limit > 0 ? '<div class="bar '+(over ? 'over' : '')+'"><i style="width:'+w+'%"></i></div>' : '') + '</div>';
+}
+function goalMini(g){
+  var s = saved(g), p = pct(s, g.target);
+  var th = g.img ? '<span class="gth"><img src="'+g.img+'" alt=""></span>' : ci('🎯','lg');
+  return '<div class="card gmini"><div class="h">'+th+'<div class="mid"><div class="gname" data-act="editgoal" data-id="'+g.id+'">'+esc(g.name)+'</div><div class="sub"><b>'+fmt(s)+'</b> из '+fmt(g.target)+'</div></div>' +
+    '<span class="pill">'+p+'%</span><button class="gadd" data-act="contrib" data-id="'+g.id+'" aria-label="Добавить в цель">'+ic('plus',22)+'</button></div>' +
+    '<div class="bar"><i style="width:'+p+'%"></i></div></div>';
 }
 
 function vHome(){
   var k = curKey(), h = monthHeader(true);
   var g = goalById(S.mainGoal) || S.goals[0];
-  if (g) h += '<div class="sec"><h2>Моя цель</h2><a data-tab="goals">Все цели</a></div>' + goalCard(g, false);
-  h += '<div class="bal"><div class="lbl">'+ic('wallet',26)+' Осталось в этом месяце</div><div class="big">'+fmt(leftOf(k))+'</div>' +
+  h += '<div class="bal"><div class="lbl">Осталось в этом месяце</div><div class="big">'+fmt(leftOf(k))+'</div>' +
     '<div class="row"><div class="mini"><span>Доход</span><b>'+fmt(incomeOf(k))+'</b></div><div class="mini"><span>Потрачено</span><b>'+fmt(spentOf(k))+'</b></div></div></div>';
   h += overBanner(k);
-  h += '<div class="card plan" data-act="plan"><div class="ico">'+ic('calc',34)+'</div><div><b>Спланировать бюджет</b><span>Распределите доход по категориям и мечте</span></div></div>';
+  if (g) h += goalMini(g);
+  h += '<div class="plan slim" data-act="plan">'+ic('calc',20)+'<b>Спланировать бюджет</b><span>›</span></div>';
   h += '<div class="sec"><h2>Категории</h2><a data-act="newcat">Изменить</a></div>';
   h += S.cats.length ? S.cats.map(function(c){ return catCard(c, k); }).join('') : '<div class="card empty">Категорий пока нет. Нажмите «Изменить», чтобы добавить.</div>';
-  if (ONLINE && BOT) h += '<button class="btn ghost" data-act="invite" style="margin-top:.9rem">'+ic('plus',22)+' Позвать друзей — скидка на подписку</button>';
   return h;
 }
 
