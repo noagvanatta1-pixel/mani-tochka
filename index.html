@@ -608,7 +608,7 @@ var userName = function(){ return P().name || tgName || ''; };
 
 /* ---------- UI helpers ---------- */
 var toastT;
-var UNDO_MS = 5000, snackT = null, snackI = null, undoFn = null;
+var UNDO_MS = 3000, snackT = null, snackI = null, undoFn = null;
 function hideUndo(){ clearTimeout(snackT); clearInterval(snackI); undoFn = null; var e = $('#snack'); if (e) e.classList.remove('on'); }
 function showUndo(text, fn){
   hideUndo(); undoFn = fn;
