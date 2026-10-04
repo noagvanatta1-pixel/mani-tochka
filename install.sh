@@ -47,10 +47,12 @@ APP_URL=https://$DOMAIN
 DATA_DIR=$DATA_DIR
 PORT=3000
 NODE_ENV=production
+BOT_USERNAME=TheSavedMoney_bot
 ENVEOF
   chmod 600 "$ENV_FILE"
 else
   sed -i "s#^APP_URL=.*#APP_URL=https://$DOMAIN#" "$ENV_FILE"
+  grep -q '^BOT_USERNAME=' "$ENV_FILE" || echo "BOT_USERNAME=TheSavedMoney_bot" >> "$ENV_FILE"
 fi
 
 echo "==> Служба"

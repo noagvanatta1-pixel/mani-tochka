@@ -219,7 +219,7 @@ function securityHeaders(res) {
 
 /* ---------- API ---------- */
 const IMG_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
-let BOT_NAME = '';
+let BOT_NAME = process.env.BOT_USERNAME || '';
 
 async function handleApi(req, res, url) {
   const user = authenticate(req);
@@ -288,7 +288,7 @@ server.requestTimeout = 30000;
 
 /* ---------- Бот ---------- */
 async function tgApi(method, payload, timeoutMs) {
-  const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+  const r = await fetch(`${(process.env.TG_API_BASE || 'https://api.telegram.org').replace(/\/$/, '')}/bot${BOT_TOKEN}/${method}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload || {}),
@@ -315,18 +315,24 @@ async function handleUpdate(u) {
 }
 
 async function startBot() {
-  try {
-    const me = await tgApi('getMe');
-    if (!me.ok) { console.error('Бот: Telegram не принял токен. Проверьте BOT_TOKEN.'); return; }
-    BOT_NAME = me.result.username || '';
-    console.log('Бот: @' + BOT_NAME);
-    if (!APP_URL) { console.warn('Бот: не задан APP_URL — кнопка открытия приложения не настроена.'); return; }
-    await tgApi('deleteWebhook');
-    await tgApi('setChatMenuButton', { menu_button: { type: 'web_app', text: 'Открыть', web_app: { url: APP_URL } } });
-    await tgApi('setMyCommands', { commands: [{ command: 'start', description: 'Открыть Копилку' }] });
-  } catch (e) {
-    console.error('Бот: не удалось подключиться к Telegram:', e.message);
-    return;
+  /* Telegram с некоторых хостингов бывает недоступен: пробуем снова, пока не получится. */
+  let delay = 5000;
+  while (!stopping) {
+    try {
+      const me = await tgApi('getMe');
+      if (!me.ok) { console.error('Бот: Telegram не принял токен. Проверьте BOT_TOKEN.'); return; }
+      BOT_NAME = me.result.username || BOT_NAME;
+      console.log('Бот: @' + BOT_NAME);
+      if (!APP_URL) { console.warn('Бот: не задан APP_URL — кнопка открытия приложения не настроена.'); return; }
+      await tgApi('deleteWebhook');
+      await tgApi('setChatMenuButton', { menu_button: { type: 'web_app', text: 'Открыть', web_app: { url: APP_URL } } });
+      await tgApi('setMyCommands', { commands: [{ command: 'start', description: 'Открыть Копилку' }] });
+      break;
+    } catch (e) {
+      console.error('Бот: не удалось подключиться к Telegram (' + e.message + '), повтор через ' + Math.round(delay / 1000) + ' с');
+      await sleep(delay);
+      delay = Math.min(delay * 2, 300000);
+    }
   }
   let offset = 0;
   while (!stopping) {
