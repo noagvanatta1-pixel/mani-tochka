@@ -261,7 +261,9 @@ input.f,.panel input{border-radius:.875rem;border-width:1.5px;border-color:var(-
 .cat .mid,.gmini .mid{flex:1;min-width:0}
 .cat .nm{font-size:1.0625rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cat .sub,.gmini .sub{font-size:.8125rem;font-weight:500;color:var(--muted);margin-top:.0625rem}
-.cat .sub.neg{color:var(--red)}
+.cat .sub.left,.cat .sub.neg{display:inline-block;font-size:.875rem;font-weight:700;padding:.125rem .5rem;border-radius:.5rem;margin-top:.1875rem}
+.cat .sub.left{color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent)}
+.cat .sub.neg{color:var(--red);background:color-mix(in srgb,var(--red) 14%,transparent)}
 .cat .amt{font-family:var(--fd);font-size:1rem;font-weight:500;margin:0}
 .cat .bar,.gmini .bar{margin:0}
 .cat .em{width:auto}
@@ -618,7 +620,7 @@ function catCard(c, k){
   var w = c.limit > 0 ? Math.min(100, sp / c.limit * 100) : (sp > 0 ? 100 : 0);
   var sub = c.limit > 0 ? (over ? 'перерасход '+fmt(-left) : 'осталось '+fmt(left)) : (sp > 0 ? 'без лимита' : 'нет лимита');
   return '<div class="card cat" data-act="editcat" data-id="'+c.id+'"><div class="h"><div class="em">'+ci(c.emoji)+'</div>' +
-    '<div class="mid"><div class="nm">'+esc(c.name)+'</div><div class="sub '+(over ? 'neg' : '')+'">'+sub+'</div></div>' +
+    '<div class="mid"><div class="nm">'+esc(c.name)+'</div><div class="sub '+(c.limit > 0 ? (over ? 'neg' : 'left') : '')+'">'+sub+'</div></div>' +
     '<div class="amt">'+fmt(sp)+'</div></div>' +
     (c.limit > 0 ? '<div class="bar '+(over ? 'over' : '')+'"><i style="width:'+w+'%"></i></div>' : '') + '</div>';
 }
