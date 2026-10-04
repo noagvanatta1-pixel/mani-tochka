@@ -130,8 +130,8 @@ const FAMILY_MAX = Number(process.env.FAMILY_MAX) || 2;
 /* Подписка. PAYWALL=1 включает платные функции после пробного периода. */
 const PAYWALL = process.env.PAYWALL === '1';
 const TRIAL_DAYS = Number(process.env.TRIAL_DAYS) || 14;
-const PRICE_MONTH = Number(process.env.PRICE_MONTH) || 199;
-const PRICE_YEAR = Number(process.env.PRICE_YEAR) || 1590;
+const PRICE_MONTH = Number(process.env.PRICE_MONTH) || 99;
+const PRICE_YEAR = Number(process.env.PRICE_YEAR) || 790;
 const PAY_URL = process.env.PAY_URL || '';                       // ссылка на оплату; {uid} заменится на id пользователя
 const SUPPORT_TG = String(process.env.SUPPORT_TG || '').replace(/^@/, '').replace(/[^\w]/g, '');
 const PAY_SECRET = process.env.PAY_SECRET || '';                 // секрет для уведомлений об оплате
