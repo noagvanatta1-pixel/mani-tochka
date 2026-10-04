@@ -72,6 +72,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS referrals (
     user_id INTEGER PRIMARY KEY, referrer_id INTEGER NOT NULL, created_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS payments (
+    charge_id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, plan TEXT NOT NULL, stars INTEGER NOT NULL, created_at INTEGER NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS images (
     user_id INTEGER NOT NULL, goal_id TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, goal_id)
@@ -105,6 +108,7 @@ const q = {
   setCode: db.prepare('UPDATE families SET code = ? WHERE id = ?'),
   delFam: db.prepare('DELETE FROM families WHERE id = ?'),
   premiumOf: db.prepare('SELECT until FROM premium WHERE user_id = ?'),
+  insPayment: db.prepare('INSERT OR IGNORE INTO payments (charge_id, user_id, plan, stars, created_at) VALUES (?, ?, ?, ?, ?)'),
   userCreated: db.prepare('SELECT created_at FROM users WHERE id = ?'),
   putPremium: db.prepare(`INSERT INTO premium (user_id, until) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET until = excluded.until`),
   famPremium: db.prepare(`SELECT MAX(p.until) AS until FROM premium p JOIN members m ON m.user_id = p.user_id WHERE m.family_id = ?`),
@@ -134,6 +138,8 @@ const PRICE_MONTH = Number(process.env.PRICE_MONTH) || 99;
 const PRICE_YEAR = Number(process.env.PRICE_YEAR) || 790;
 const PAY_URL = process.env.PAY_URL || '';                       // ссылка на оплату; {uid} заменится на id пользователя
 const SUPPORT_TG = String(process.env.SUPPORT_TG || '').replace(/^@/, '').replace(/[^\w]/g, '');
+const STARS_MONTH = Number(process.env.STARS_MONTH) || 75;       // цена в звёздах Telegram
+const STARS_YEAR = Number(process.env.STARS_YEAR) || 600;
 const PAY_SECRET = process.env.PAY_SECRET || '';                 // секрет для уведомлений об оплате
 const FAMILY_PAID = process.env.FAMILY_PAID === '1';   // 1 = семью создаёт только подписчик
 
@@ -308,6 +314,7 @@ function planInfo(uid) {
     priceMonth: Math.round(PRICE_MONTH * k), priceYear: Math.round(PRICE_YEAR * k),
     fullMonth: PRICE_MONTH, fullYear: PRICE_YEAR, discount: disc,
     pay: PAY_URL ? PAY_URL.replace('{uid}', String(uid)) : '', support: SUPPORT_TG,
+    stars: !!(BOT_TOKEN && BOT_NAME), starsMonth: Math.round(STARS_MONTH * k), starsYear: Math.round(STARS_YEAR * k),
   };
 }
 function grantPremium(uid, days) {
@@ -378,6 +385,25 @@ async function handleApi(req, res, url) {
   const user = authenticate(req);
   rateLimit(user.id);
   const p = url.pathname, m = req.method;
+
+  if (p === '/api/pay/stars' && m === 'POST') {
+    const body = await readJson(req, 1024);
+    const plan = body && body.plan === 'year' ? 'year' : body && body.plan === 'month' ? 'month' : '';
+    if (!plan) throw httpError(400, 'bad plan');
+    if (!BOT_TOKEN || !BOT_NAME) throw httpError(503, 'payments unavailable');
+    touch(user);
+    const info = planInfo(user.id);
+    const stars = plan === 'year' ? info.starsYear : info.starsMonth;
+    const r = await tgApi('createInvoiceLink', {
+      title: plan === 'year' ? 'Копилка на год' : 'Копилка на месяц',
+      description: plan === 'year' ? 'Подписка на 12 месяцев: несколько целей, семья, регулярные платежи, экспорт и напоминания' : 'Подписка на 30 дней: несколько целей, семья, регулярные платежи, экспорт и напоминания',
+      payload: plan + '|' + user.id,
+      currency: 'XTR',
+      prices: [{ label: plan === 'year' ? 'Год' : 'Месяц', amount: stars }],
+    }, 10000).catch(() => null);
+    if (!r || !r.ok || typeof r.result !== 'string') throw httpError(502, 'telegram error');
+    return json(res, 200, { link: r.result, stars });
+  }
 
   if (p === '/api/plan' && m === 'GET') { touch(user); return json(res, 200, planInfo(user.id)); }
 
@@ -669,7 +695,35 @@ async function handleCallback(cb) {
   await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: nid ? 'Записано' : 'Не удалось записать' });
   if (nid) await tgApi('editMessageText', { chat_id: cb.message.chat.id, message_id: cb.message.message_id, text: doneText(pend.uid, pend.op, cat), reply_markup: undoButton(nid) });
 }
+/* Оплата звёздами: Telegram сначала спрашивает подтверждение, потом присылает successful_payment */
+function parsePayload(str) {
+  const m = String(str || '').match(/^(month|year)\|(\d{1,15})$/);
+  return m ? { plan: m[1], uid: Number(m[2]) } : null;
+}
+async function handlePreCheckout(pq) {
+  const pl = parsePayload(pq.invoice_payload);
+  const good = pl && pl.uid === pq.from.id && pq.currency === 'XTR';
+  await tgApi('answerPreCheckoutQuery', good ? { pre_checkout_query_id: pq.id, ok: true } : { pre_checkout_query_id: pq.id, ok: false, error_message: 'Не удалось подтвердить оплату, попробуйте ещё раз' });
+}
+async function handlePayment(m) {
+  const sp = m.successful_payment, pl = parsePayload(sp.invoice_payload);
+  if (!pl || pl.uid !== m.from.id) { console.error('Оплата: неожиданные данные', sp.telegram_payment_charge_id); return; }
+  /* запись о платеже и продление подписки — одной операцией: либо оба, либо ни одного */
+  const until = tx(() => {
+    const ins = q.insPayment.run(String(sp.telegram_payment_charge_id), pl.uid, pl.plan, Number(sp.total_amount) || 0, Date.now());
+    if (!ins.changes) return 0;   // этот платёж уже учтён
+    const cur = q.premiumOf.get(pl.uid);
+    const end = Math.max(Date.now(), cur ? cur.until : 0) + (pl.plan === 'year' ? 365 : 30) * 86400000;
+    q.putPremium.run(pl.uid, end);
+    return end;
+  });
+  if (!until) return;
+  const d = new Date(until + 3 * 3600000), pad = (n) => String(n).padStart(2, '0');
+  await tgApi('sendMessage', { chat_id: m.chat.id, text: `✅ Оплата получена, спасибо! Подписка активна до ${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}.`, reply_markup: openButton() });
+}
 async function handleUpdate(u) {
+  if (u.pre_checkout_query) return handlePreCheckout(u.pre_checkout_query);
+  if (u.message && u.message.successful_payment) return handlePayment(u.message);
   if (u.callback_query) return handleCallback(u.callback_query);
   const m = u.message;
   if (!m || !m.chat || m.chat.type !== 'private') return;
@@ -713,7 +767,7 @@ async function startBot() {
   let offset = 0;
   while (!stopping) {
     try {
-      const r = await tgApi('getUpdates', { offset, timeout: 50, allowed_updates: ['message', 'callback_query'] }, 65000);
+      const r = await tgApi('getUpdates', { offset, timeout: 50, allowed_updates: ['message', 'callback_query', 'pre_checkout_query'] }, 65000);
       if (!r.ok) { await sleep(5000); continue; }
       for (const u of r.result) {
         offset = u.update_id + 1;

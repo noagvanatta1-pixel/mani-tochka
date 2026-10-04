@@ -20,6 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/noagvanatta1-pixel/mani-tochka/main
 | `TRIAL_DAYS` | длина пробного периода, по умолчанию 14 |
 | `PRICE_MONTH`, `PRICE_YEAR` | цены, по умолчанию 99 и 790 ₽ |
 | `PAY_URL` | ссылка на оплату, `{uid}` заменяется на id пользователя; если пусто — кнопка оплаты открывает чат с поддержкой |
+| `STARS_MONTH`, `STARS_YEAR` | цена подписки в звёздах Telegram, по умолчанию 75 и 600 |
 | `PAY_SECRET` | секрет для уведомлений об оплате (создаётся при установке) |
 | `FAMILY_PAID=1` | создавать семью может только подписчик (на сервере) |
 | `TG_API_BASE` | адрес прокси для Telegram API, если сервер его не видит |
@@ -31,6 +32,10 @@ curl -fsSL https://raw.githubusercontent.com/noagvanatta1-pixel/mani-tochka/main
 - Первые `TRIAL_DAYS` дней открыто всё. После них при `PAYWALL=1` бесплатными остаются учёт расходов и одна цель; платные: несколько целей, семья, регулярные платежи, экспорт, напоминания.
 - Выдать подписку вручную: `sqlite3 /var/lib/mani/mani.db "INSERT OR REPLACE INTO premium(user_id, until) VALUES (ID, (strftime('%s','now')+30*86400)*1000)"`.
 - Автоматически: платёжный сервис вызывает `POST https://ДОМЕН/api/pay/webhook?secret=PAY_SECRET` с телом `{"user_id": 123, "days": 30}` — срок продлится.
+
+## Оплата звёздами Telegram
+
+Кнопки «Год» и «Месяц» в приложении создают счёт в звёздах (`createInvoiceLink`, валюта XTR). Бот подтверждает платёж (`pre_checkout_query`), по `successful_payment` продлевает подписку на 30 или 365 дней и записывает платёж в таблицу `payments` (повторный платёж с тем же номером не учитывается). Для оплаты серверу нужен доступ к Telegram API (через `TG_API_BASE`, если хостинг его блокирует). Вернуть платёж: метод Bot API `refundStarPayment`.
 
 ## Бот
 
