@@ -350,6 +350,10 @@ html:not([data-theme=pink]):not([data-theme=mint]):not([data-theme=lav]):not([da
 html[data-theme=pink] .hgrid .cat .ch .ci,html[data-theme=mint] .hgrid .cat .ch .ci,html[data-theme=lav] .hgrid .cat .ch .ci,html[data-theme=sky] .hgrid .cat .ch .ci{color:hsl(var(--ch) 65% 38%)}
 .trialbar{margin:-.5rem 0 .75rem;padding:.625rem .875rem;border-radius:.875rem;background:var(--pink-l);color:var(--pink-d);font-weight:600;font-size:.875rem;cursor:pointer}
 .trialbar b{font-weight:800}
+.webbar{display:flex;align-items:center;gap:.75rem;margin:0 0 .75rem;padding:.75rem .875rem;border-radius:1rem;background:#229ED9;color:#fff;cursor:pointer}
+.webbar div{flex:1;min-width:0;font-size:.8125rem;line-height:1.3;font-weight:500}
+.webbar b{display:block;font-size:.9375rem;font-weight:800}
+.webbar span{flex:none;background:#fff;color:#1b87b8;font-weight:800;font-size:.8125rem;padding:.45rem .75rem;border-radius:.75rem}
 .quick{margin:.5rem 0 .25rem;flex-wrap:nowrap;overflow-x:auto;padding-bottom:.25rem;-webkit-overflow-scrolling:touch}
 .quick .chip{flex:none;white-space:nowrap}
 .tips{padding:.5rem .875rem}
@@ -855,7 +859,7 @@ function goalMini(g){
 }
 
 function vHome(){
-  var k = curKey(), h = monthHeader(true) + trialBar();
+  var k = curKey(), h = webBar() + monthHeader(true) + trialBar();
   var g = goalById(S.mainGoal) || S.goals[0];
   h += '<div class="bal"><div class="lbl">Осталось в этом месяце</div><div class="big">'+fmt(leftOf(k))+'</div>' +
     '<div class="row"><div class="mini"><span>Доход</span><b>'+fmt(incomeOf(k))+'</b></div><div class="mini"><span>Потрачено</span><b>'+fmt(spentOf(k))+'</b></div></div></div>';
@@ -1463,6 +1467,7 @@ var ACT = {
     markDirty('me'); save(); toast('Сохранено');
   },
   dismissal: function(d){ try { localStorage.setItem('kp_dis', d.sig); } catch (e) {} render(); },
+  openbot: function(){ openTg('https://t.me/' + (BOT || 'TheSavedMoney_bot')); },
   stats: function(){ api('GET', '/api/admin/stats').then(statsSheet).catch(function(){ toast('Не удалось загрузить статистику'); }); },
   theme: function(d){ P().theme = d.v; markDirty('me'); haptic(); render(); },
   scale: function(d){ P().scale = d.v; markDirty('me'); haptic(); render(); },
@@ -1739,6 +1744,10 @@ var PW_WHAT = '';
 function openPaywall(what){
   PW_WHAT = what;
   sheet('<h3>Нужна подписка</h3><div class="hi" style="margin:.2rem .25rem .9rem;font-weight:600">' + esc(what || 'Эта функция') + ' доступна по подписке. Учёт расходов и одна цель остаются бесплатными.</div>' + priceBtns() + '<div class="hi" style="margin:.8rem .25rem 0;font-size:.8rem;font-weight:600">Без автопродления: когда срок закончится, решаете вы.</div>');
+}
+function webBar(){
+  if (tg && tg.initData) return '';
+  return '<div class="webbar" data-act="openbot"><div><b>Откройте в Telegram</b>Так сохранятся данные на всех устройствах и заработает оплата. Здесь всё хранится только в этом браузере.</div><span>Открыть</span></div>';
 }
 function trialBar(){
   if (!ONLINE || !PLAN || !PLAN.paywall || PLAN.status !== 'trial' || PLAN.daysLeft > 3) return '';
