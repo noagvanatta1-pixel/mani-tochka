@@ -330,15 +330,18 @@ input.f,.panel input{border-radius:.875rem;border-width:1.5px;border-color:var(-
 
 
 /* компактные категории */
-.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
-.cgrid .cat{margin:0;padding:.75rem;min-height:5.5rem;display:flex;flex-direction:column;min-width:0}
-.cgrid .cat .ch{display:flex;align-items:center;gap:.5rem;min-width:0}
-.cgrid .cat .ch .em{width:1.75rem;flex:none;font-size:1.25rem}
-.cgrid .cat .ch .nm{font-size:.9375rem;font-weight:600;min-width:0}
-.cgrid .cat .amt{font-size:1.1875rem;font-weight:600;margin:.375rem 0 .125rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cgrid .cat .sub{margin:0 0 .375rem;font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0;background:none;display:block;font-weight:600}
-.cgrid .cat .sub.left,.cgrid .cat .sub.neg{padding:0;background:none;font-size:.75rem;margin:0 0 .375rem}
-.cgrid .cat .bar{margin-top:auto}
+.hgrid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.hgrid .cat{margin:0;padding:.75rem;min-height:5.5rem;display:flex;flex-direction:column;min-width:0}
+.hgrid .cat .ch{display:flex;align-items:center;gap:.5rem;min-width:0}
+.hgrid .cat .ch .em{width:1.75rem;flex:none;font-size:1.25rem}
+.hgrid .cat .ch .nm{font-size:.9375rem;font-weight:600;min-width:0}
+.hgrid .cat .amt{font-size:1.1875rem;font-weight:600;margin:.375rem 0 .125rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hgrid .cat .sub{margin:0 0 .375rem;font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0;background:none;display:block;font-weight:600}
+.hgrid .cat .sub.left,.hgrid .cat .sub.neg{padding:0;background:none;font-size:.75rem;margin:0 0 .375rem}
+.hgrid .cat .bar{margin-top:auto}
+.hgrid .cat .ch .ci{color:hsl(var(--ch) 75% 70%);background:hsl(var(--ch) 65% 55%/.18);border-radius:.625rem}
+html:not([data-theme=pink]):not([data-theme=mint]):not([data-theme=lav]):not([data-theme=sky]) .hgrid .cat .ch .ci{color:hsl(var(--ch) 80% 72%)}
+html[data-theme=pink] .hgrid .cat .ch .ci,html[data-theme=mint] .hgrid .cat .ch .ci,html[data-theme=lav] .hgrid .cat .ch .ci,html[data-theme=sky] .hgrid .cat .ch .ci{color:hsl(var(--ch) 65% 38%)}
 .trialbar{margin:-.5rem 0 .75rem;padding:.625rem .875rem;border-radius:.875rem;background:var(--pink-l);color:var(--pink-d);font-weight:600;font-size:.875rem;cursor:pointer}
 .trialbar b{font-weight:800}
 .quick{margin:.5rem 0 .25rem;flex-wrap:nowrap;overflow-x:auto;padding-bottom:.25rem;-webkit-overflow-scrolling:touch}
@@ -823,7 +826,8 @@ function catCard(c, k){
   var left = c.limit - sp, over = sp > c.limit;
   var w = c.limit > 0 ? Math.min(100, sp / c.limit * 100) : (sp > 0 ? 100 : 0);
   var sub = c.limit > 0 ? (over ? 'перерасход '+fmt(-left) : 'осталось '+fmt(left)) : (sp > 0 ? 'без лимита' : 'нет лимита');
-  return '<div class="card cat" data-act="catadd" data-id="'+c.id+'"><div class="ch"><div class="em">'+ci(c.emoji)+'</div><div class="nm">'+esc(c.name)+'</div></div>' +
+  var hue = (S.cats.indexOf(c) * 47 + 255) % 360;
+  return '<div class="card cat" style="--ch:'+hue+'" data-act="catadd" data-id="'+c.id+'"><div class="ch"><div class="em">'+ci(c.emoji)+'</div><div class="nm">'+esc(c.name)+'</div></div>' +
     '<div class="amt">'+fmt(sp)+'</div><div class="sub '+(c.limit > 0 ? (over ? 'neg' : 'left') : '')+'">'+sub+'</div>' +
     (c.limit > 0 ? '<div class="bar '+(over ? 'over' : '')+'"><i style="width:'+w+'%"></i></div>' : '') + '</div>';
 }
@@ -844,7 +848,7 @@ function vHome(){
   if (g) h += goalMini(g);
   h += '<div class="plan slim" data-act="plan">'+ic('calc',20)+'<b>Спланировать бюджет</b><span>›</span></div>';
   h += '<div class="sec"><h2>Категории</h2></div>';
-  h += S.cats.length ? '<div class="cgrid">' + S.cats.map(function(c){ return catCard(c, k); }).join('') + '</div>' : '<div class="card empty">Категорий пока нет. Откройте «Спланировать бюджет» и добавьте их.</div>';
+  h += S.cats.length ? '<div class="hgrid">' + S.cats.map(function(c){ return catCard(c, k); }).join('') + '</div>' : '<div class="card empty">Категорий пока нет. Откройте «Спланировать бюджет» и добавьте их.</div>';
   return h + recentOps(k);
 }
 
@@ -1044,14 +1048,16 @@ function vProf(){
   return '<div class="top"><div><div class="title">Профиль</div></div></div>' +
     '<div class="card prof"><div class="ava">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span class="pchip '+(st === 'premium' ? 'gold' : '')+'">'+(st === 'premium' ? '★ ' : '')+chip+'</span></div></div>' +
     '<div class="plan slim setlink" data-act="opensettings">'+ic('gear',20)+'<b>Настройки</b><span>›</span></div>' +
-    planCard() + '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + Object.keys(THEMES).map(function(k){ var th = THEMES[k]; return '<button class="th '+((P().theme || 'vio') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join('') + '</div>' +
-    '<label>Размер интерфейса</label><div class="seg">' + Object.keys(SCALES).map(function(k){ return '<button class="'+((P().scale || 'm') === k ? 'on' : '')+'" data-act="scale" data-v="'+k+'">'+SCALES[k].n+'</button>'; }).join('') + '</div></div>' +
-    currencyCard() + familyCard() + refCard() + accountCard() + supportCard() +
+    planCard() + recurCard() + familyCard() + refCard() + accountCard() + supportCard() +
     '<div class="ver">Копилка · ' + (ONLINE ? 'данные синхронизируются с сервером' : 'данные хранятся на этом устройстве') + '</div>';
 }
 function currencyCard(){
   return '<div class="card set"><label style="margin-top:0">Валюта учёта</label><div class="chips">' + Object.keys(CURS).filter(function(c){ return ['RUB','USD','KZT','UAH'].indexOf(c) >= 0 || c === baseCode(); }).map(function(c){ return '<button class="chip ' + (baseCode() === c ? 'on' : '') + '" data-act="setcur" data-v="' + c + '">' + CURS[c][0] + ' ' + c + '</button>'; }).join('') + '</div>' +
     '<div class="hi" style="margin:.7rem .25rem 0;font-size:.8rem;font-weight:600">Все суммы показываются в этой валюте. При смене валюты все записи пересчитаются по курсу ЦБ.</div></div>';
+}
+function themeCard(){
+  return '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + Object.keys(THEMES).map(function(k){ var th = THEMES[k]; return '<button class="th '+((P().theme || 'vio') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join('') + '</div>' +
+    '<label>Размер интерфейса</label><div class="seg">' + Object.keys(SCALES).map(function(k){ return '<button class="'+((P().scale || 'm') === k ? 'on' : '')+'" data-act="scale" data-v="'+k+'">'+SCALES[k].n+'</button>'; }).join('') + '</div></div>';
 }
 function vSet(){
   return '<a class="backlink" data-act="backprof">‹ Профиль</a><div class="top"><div><div class="title">Настройки</div></div></div>' +
@@ -1059,7 +1065,7 @@ function vSet(){
     '<label style="margin-top:0">Ваше имя</label><input class="f" id="s-name" value="'+esc(P().name)+'" placeholder="'+esc(tgName || 'Как к вам обращаться')+'">' +
     '<label>Доход в месяц по умолчанию, '+SYM()+'</label><input class="f" id="s-inc" inputmode="decimal" value="'+S.defaultIncome+'">' +
     '<button class="btn big" data-act="savesettings">Сохранить</button></div>' +
-    remindCard() + recurCard() + exportCard() +
+    themeCard() + currencyCard() + remindCard() + exportCard() +
     '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button></div>';
 }
 
