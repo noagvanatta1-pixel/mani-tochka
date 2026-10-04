@@ -184,7 +184,10 @@ textarea.csv{width:100%;height:12rem;border:2px solid var(--pink-l);border-radiu
 .ver{text-align:center;color:var(--muted);font-size:0.8125rem;margin-top:1.5rem;font-weight:600}
 
 /* --- redesign layer --- */
-.panel .amtbox input{width:8rem;text-align:right}
+.panel .amtbox{max-width:100%}
+.panel .amtbox input{flex:1 1 auto;width:100%;min-width:0;max-width:none;text-align:center;font-size:clamp(22px,8vw,2.2rem)}
+.panel .amtbox span{flex:none}
+.panel input[type=date]{min-width:0;max-width:100%;display:block;-webkit-appearance:none;appearance:none;text-align:left;min-height:3rem}
 html,body{font-family:'Onest',system-ui,-apple-system,'Segoe UI',sans-serif}
 body{font-weight:500}
 .title,.bal .big,.budget .n,.cat .amt,.fcode,.panel .amtbox input,.kpi b{font-family:var(--fd)}
@@ -357,7 +360,7 @@ var CURS = {RUB:['₽','Рубль'], USD:['$','Доллар'], EUR:['€','Ев
 var RATES = null;   /* сколько рублей за 1 единицу валюты (с сервера, курс ЦБ) */
 function baseCode(){ return (typeof S === 'object' && S && CURS[S.cur]) ? S.cur : 'RUB'; }
 function SYM(){ return CURS[baseCode()][0]; }
-function rateFor(c){ var b = baseCode(); if (c === b) return 1; if (!RATES || !RATES[c]) return 0; var rb = b === 'RUB' ? 1 : RATES[b]; return rb ? RATES[c] / rb : 0; }
+function rateFor(c){ var b = baseCode(); if (c === b) return 1; if (!RATES) return 0; var rc = c === 'RUB' ? 1 : RATES[c], rb = b === 'RUB' ? 1 : RATES[b]; return rc && rb ? rc / rb : 0; }
 var fmt = function(n){ return Math.round(n).toLocaleString('ru-RU') + ' ' + SYM(); };
 var fmtc = function(a, c){ return a.toLocaleString('ru-RU', {maximumFractionDigits: 2}) + ' ' + (CURS[c] ? CURS[c][0] : c); };
 var pct = function(a,b){ return b > 0 ? Math.max(0, Math.min(100, Math.round(a/b*100))) : 0; };
@@ -1145,15 +1148,34 @@ function updContrib(){
   el.textContent = after < 0 ? 'В цели нет столько денег' : 'После: ' + fmt(after) + ' из ' + fmt(g.target) + ' (' + pct(after, g.target) + '%)';
 }
 
+function convertAll(k){
+  var r = function(x){ return Math.round((+x || 0) * k * 100) / 100; };
+  (S.ops || []).forEach(function(o){ o.amount = r(o.amount); });
+  S.defaultIncome = r(S.defaultIncome);
+  Object.keys(S.income || {}).forEach(function(m){ S.income[m] = r(S.income[m]); });
+  (S.cats || []).forEach(function(c){ c.limit = r(c.limit); });
+  (S.goals || []).forEach(function(g){ g.target = r(g.target); (g.contribs || []).forEach(function(c){ c.amount = r(c.amount); }); });
+  (S.recurring || []).forEach(function(x){ x.amount = r(x.amount); });
+  (S.debts || []).forEach(function(d){ d.total = r(d.total); d.pay = r(d.pay); (d.payments || []).forEach(function(p){ p.amount = r(p.amount); }); });
+}
+
 /* ---------- Actions ---------- */
 var ACT = {
   mprev: function(){ var b = monthBounds(); if (curKey() <= b.lo) return; VM.m--; if (VM.m < 0) { VM.m = 11; VM.y--; } render(); },
   mnext: function(){ var b = monthBounds(); if (curKey() >= b.hi) return; VM.m++; if (VM.m > 11) { VM.m = 0; VM.y++; } render(); },
   setcur: function(d){
     if (d.v === baseCode()) return;
-    var has = S.ops.length > 0;
-    var go = function(){ S.cur = d.v; save(); render(); toast('Валюта: ' + CURS[d.v][0] + ' ' + d.v); };
-    if (has) confirmBox('Сменить валюту учёта на ' + d.v + '? Уже записанные суммы не пересчитываются, изменится только значок.', go); else go();
+    var old = baseCode(), has = S.ops.length > 0 || S.goals.length > 0 || (S.debts || []).length > 0;
+    var go = function(k){
+      if (k && k !== 1) convertAll(k);
+      S.cur = d.v;
+      if (k && k !== 1) (S.ops || []).forEach(function(o){ if (o.fc && o.fc.a) o.fc.r = Math.round(o.amount / o.fc.a * 1e6) / 1e6; });
+      save(); render(); toast('Валюта: ' + CURS[d.v][0] + ' ' + d.v);
+    };
+    if (!has) { go(0); return; }
+    S.cur = d.v; var k = rateFor(old); S.cur = old;
+    if (k) confirmBox('Сменить валюту учёта на ' + d.v + '? Все суммы пересчитаются по курсу ЦБ: 1 ' + old + ' = ' + (Math.round(k * 10000) / 10000) + ' ' + d.v + '.', function(){ go(k); });
+    else confirmBox('Курс сейчас недоступен. Сменить валюту на ' + d.v + ' без пересчёта (изменится только значок)?', function(){ go(0); });
   },
   gosummary: function(d){ var p = d.k.split('-'); VM.y = +p[0]; VM.m = +p[1] - 1; TAB = 'an'; window.scrollTo(0, 0); render(); },
   newdebt: function(){ if ((S.debts || []).length >= 1 && gate('Несколько долгов')) return; openDebt(); },
@@ -1443,6 +1465,7 @@ document.addEventListener('click', function(e){
 });
 document.addEventListener('input', function(e){
   var id = e.target.id, c = e.target.classList;
+  if (e.target.closest && e.target.closest('.amtbox')) { var L = e.target.value.length; e.target.style.fontSize = L > 9 ? '1.3rem' : L > 7 ? '1.7rem' : ''; }
   if (c && (c.contains('plim') || id === 'p-inc')) updPlan();
   else if (id === 'g-target' || id === 'g-months') updGoal();
   else if (id === 'k-amt') updContrib();
