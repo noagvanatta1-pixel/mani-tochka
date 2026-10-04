@@ -220,6 +220,8 @@ body{font-weight:500}
 .prof .ava{width:3.5rem;height:3.5rem;border-radius:50%;background:var(--pink-d);color:#fff;display:grid;place-items:center;font:800 1.5rem var(--fd,inherit)}
 .prof b{display:block;font-size:1.25rem}
 .prof span{font-size:.875rem;opacity:.7}
+.prof .pchip{display:inline-block;margin-top:.35rem;padding:.2rem .7rem;border-radius:2rem;font-weight:700;opacity:1;border:1.5px solid var(--line,rgba(128,128,128,.35))}
+.prof .pchip.gold{color:#4a3000;background:linear-gradient(135deg,#ffe27a,#f5b82e 55%,#ffd75e);border-color:#b8860b;box-shadow:0 0 0 2px rgba(255,205,70,.28),0 2px 10px rgba(245,184,46,.35)}
 .mnav button:disabled{opacity:.3;pointer-events:none}
 .mlist{display:flex;flex-direction:column;gap:.5rem}
 .mrow{display:flex;justify-content:space-between;align-items:center;padding:.9rem 1rem;border-radius:.9rem;background:var(--pink-l);color:var(--ink,inherit);font-weight:600;text-align:left}
@@ -826,7 +828,7 @@ function vProf(){
   var nm = userName() || 'Профиль', st = PLAN && PLAN.status;
   var chip = st === 'premium' ? 'Премиум' : (st === 'trial' ? 'Пробный период' : 'Бесплатный тариф');
   return '<div class="top"><div><div class="title">Профиль</div></div></div>' +
-    '<div class="card prof"><div class="ava">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span>'+chip+'</span></div></div>' +
+    '<div class="card prof"><div class="ava">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span class="pchip '+(st === 'premium' ? 'gold' : '')+'">'+(st === 'premium' ? '★ ' : '')+chip+'</span></div></div>' +
     planCard() + '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + Object.keys(THEMES).map(function(k){ var th = THEMES[k]; return '<button class="th '+((P().theme || 'pink') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join('') + '</div>' +
     '<label>Размер интерфейса</label><div class="seg">' + Object.keys(SCALES).map(function(k){ return '<button class="'+((P().scale || 'm') === k ? 'on' : '')+'" data-act="scale" data-v="'+k+'">'+SCALES[k].n+'</button>'; }).join('') + '</div></div>' +
     familyCard() + refCard() + accountCard() + supportCard() +
@@ -1294,7 +1296,7 @@ function payStars(plan){
 function planCard(){
   if (!ONLINE || !PLAN || (!PLAN.paywall && PLAN.status !== 'premium')) return '';
   var t, extra = '';
-  if (PLAN.status === 'premium') { t = 'Подписка активна до ' + dmy(PLAN.until); if (PLAN.daysLeft <= 7) extra = priceBtns(); }
+  if (PLAN.status === 'premium') { t = PLAN.until > 4000000000000 ? 'Подписка навсегда' : 'Подписка активна до ' + dmy(PLAN.until); if (PLAN.daysLeft <= 7) extra = priceBtns(); }
   else if (PLAN.status === 'trial') { t = 'Пробный период: осталось ' + PLAN.daysLeft + ' ' + plural(PLAN.daysLeft, ['день', 'дня', 'дней']) + '. Все функции открыты.'; extra = priceBtns(); }
   else { t = 'Пробный период закончился. Бесплатно остаются учёт расходов и одна цель.'; extra = priceBtns(); }
   return '<div class="card set"><label style="margin-top:0">Подписка</label><div class="hi" style="margin:0 .25rem .7rem;font-weight:600">' + t + '</div>' + extra + '</div>';
