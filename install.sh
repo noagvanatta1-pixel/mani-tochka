@@ -16,8 +16,8 @@ ENV_FILE=/etc/mani.env
 
 echo "==> Пакеты"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get install -y curl git xz-utils caddy sqlite3 ufw ca-certificates
+apt-get -o DPkg::Lock::Timeout=600 update -y
+apt-get -o DPkg::Lock::Timeout=600 install -y curl git xz-utils caddy sqlite3 ufw ca-certificates
 
 echo "==> Node.js $NODE_VER"
 if ! /usr/local/bin/node -v 2>/dev/null | grep -q "$NODE_VER"; then

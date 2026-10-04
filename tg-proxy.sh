@@ -6,8 +6,8 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 echo "==> Пакеты"
-apt-get update -y
-apt-get install -y caddy curl openssl ufw
+apt-get -o DPkg::Lock::Timeout=600 update -y
+apt-get -o DPkg::Lock::Timeout=600 install -y caddy curl openssl ufw
 
 IP="$(curl -4 -fsS https://api.ipify.org || curl -4 -fsS https://ifconfig.me)"
 HOST="$(echo "$IP" | tr . -).sslip.io"
