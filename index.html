@@ -252,6 +252,9 @@ body{font-weight:500}
 .safe b{display:block;font-size:1rem;font-weight:800}
 .safe div span{display:block;font-size:.8rem;font-weight:600;opacity:.85;margin-top:.15rem}
 .safe.bad{background:var(--dangerbg);color:var(--red)}
+.safe.warn{background:rgba(245,158,11,.15);color:#d97706}
+.safe .x{margin-left:auto;flex:none;width:1.9rem;height:1.9rem;border-radius:50%;border:0;background:rgba(127,127,127,.16);color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.safe .wl{display:block;margin-top:.3rem;font-size:.8rem;font-weight:700}
 .sumcard .srow{display:flex;justify-content:space-between;gap:1rem;padding:.55rem .25rem;border-bottom:1px solid var(--line);font-size:.95rem}
 .sumcard .srow:last-child{border-bottom:0}
 .sumcard .srow span{color:var(--muted);font-weight:600}
@@ -727,11 +730,20 @@ function streakChip(){
   if (s.n === 0) return '<div class="streak off"><span class="ci sm">' + ic('flame', 16) + '</span><span>Запишите трату, чтобы начать серию</span></div>';
   return '<div class="streak"><span class="ci sm">' + ic('flame', 16) + '</span><span><b>' + s.n + ' ' + plural(s.n, ['день', 'дня', 'дней']) + ' подряд</b>' + (s.today ? '' : ' · запишите сегодня, чтобы не прервать') + '</span></div>';
 }
-function safeCard(){
-  var f = safeToday(); if (!f) return '';
-  if (f.left <= 0) return '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Бюджет месяца исчерпан</b><span>Остаток с учётом платежей: ' + fmt(f.left) + '</span></div></div>';
-  var neg = f.rest < 0;
-  return '<div class="safe' + (neg ? ' bad' : '') + '"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>' + (neg ? 'Сегодня сверх нормы: ' + fmt(-f.rest) : 'Безопасно потратить сегодня: ' + fmt(f.rest)) + '</b><span>По ' + fmt(f.allowance) + ' в день до конца месяца' + (f.bills > 0 ? ' · учтены платежи ' + fmt(f.bills) : '') + '</span></div></div>';
+function overNames(k){
+  return S.cats.filter(function(c){ return c.limit > 0 && sum(catOps(k, c.id).map(function(o){ return o.amount; })) > c.limit; }).map(function(c){ return esc(c.name); });
+}
+function disGet(){ try { return localStorage.getItem('kp_dis') || ''; } catch (e) { return ''; } }
+function alertCard(k){
+  var f = safeToday(), over = overNames(k), neg = f && f.rest < 0, empty = f && f.left <= 0;
+  var sig = today() + '|' + (empty ? 'e' : neg ? 'n' : '') + '|' + over.join(',');
+  var bad = empty || neg || over.length;
+  if (bad && disGet() === sig) return '';
+  var x = bad ? '<button class="x" data-act="dismissal" data-sig="' + sig + '" aria-label="Скрыть до завтра">×</button>' : '';
+  var lim = over.length ? '<span class="wl">Лимит превышен: ' + over.join(', ') + '</span>' : '';
+  if (!f) return over.length ? '<div class="safe warn"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Лимит превышен</b><span>' + over.join(', ') + '</span></div>' + x + '</div>' : '';
+  if (empty) return '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Бюджет месяца исчерпан</b><span>Остаток с учётом платежей: ' + fmt(f.left) + '</span>' + lim + '</div>' + x + '</div>';
+  return '<div class="safe' + ((neg || over.length) ? ' warn' : '') + '"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>' + (neg ? 'Дневная норма превышена' : 'Безопасно потратить сегодня: ' + fmt(f.rest)) + '</b><span>' + (neg ? 'На ' + fmt(-f.rest) + ' · норма ' : 'По ') + fmt(f.allowance) + ' в день до конца месяца' + (f.bills > 0 ? ' · учтены платежи ' + fmt(f.bills) : '') + '</span>' + lim + '</div>' + x + '</div>';
 }
 function summaryBanner(){
   var n = new Date(); if (n.getDate() > 3 || !isCur()) return '';
@@ -844,7 +856,7 @@ function vHome(){
   var g = goalById(S.mainGoal) || S.goals[0];
   h += '<div class="bal"><div class="lbl">Осталось в этом месяце</div><div class="big">'+fmt(leftOf(k))+'</div>' +
     '<div class="row"><div class="mini"><span>Доход</span><b>'+fmt(incomeOf(k))+'</b></div><div class="mini"><span>Потрачено</span><b>'+fmt(spentOf(k))+'</b></div></div></div>';
-  h += overBanner(k) + safeCard() + streakChip() + summaryBanner();
+  h += alertCard(k) + streakChip() + summaryBanner();
   if (g) h += goalMini(g);
   h += '<div class="plan slim" data-act="plan">'+ic('calc',20)+'<b>Спланировать бюджет</b><span>›</span></div>';
   h += '<div class="sec"><h2>Категории</h2></div>';
@@ -1447,6 +1459,7 @@ var ACT = {
     P().name = $('#s-name').value.trim(); S.defaultIncome = num($('#s-inc').value);
     markDirty('me'); save(); toast('Сохранено');
   },
+  dismissal: function(d){ try { localStorage.setItem('kp_dis', d.sig); } catch (e) {} render(); },
   stats: function(){ api('GET', '/api/admin/stats').then(statsSheet).catch(function(){ toast('Не удалось загрузить статистику'); }); },
   theme: function(d){ P().theme = d.v; markDirty('me'); haptic(); render(); },
   scale: function(d){ P().scale = d.v; markDirty('me'); haptic(); render(); },
@@ -1731,10 +1744,6 @@ function trialBar(){
 function scopeBar(){
   return '<div class="seg scope"><button class="'+(scope === 'me' ? 'on' : '')+'" data-act="scope" data-v="me">Личный</button>' +
     '<button class="'+(scope === 'fam' ? 'on' : '')+'" data-act="scope" data-v="fam">'+(FAM && FAM.family ? 'Семья' : 'Семья ＋')+'</button></div>';
-}
-function overBanner(k){
-  var over = S.cats.filter(function(c){ return c.limit > 0 && sum(catOps(k, c.id).map(function(o){ return o.amount; })) > c.limit; });
-  return over.length ? '<div class="warnbox">⚠️ Превышен лимит: ' + over.map(function(c){ return esc(c.name); }).join(', ') + '</div>' : '';
 }
 function loadFamInfo(){
   return api('GET', '/api/family').then(function(r){ FAM = r; return r; });
