@@ -161,6 +161,17 @@ input.f:focus,.panel input:focus{border-color:var(--pink)}
 .th i{width:2.875rem;height:2.875rem;border-radius:50%;display:block;box-shadow:0 0.25rem 0.625rem rgba(0,0,0,.14)}
 #toast{position:fixed;left:50%;bottom:calc(var(--nav) + 6.25rem);transform:translateX(-50%) translateY(1.25rem);background:var(--toast);color:#fff;padding:0.75rem 1.25rem;border-radius:1.25rem;font-weight:700;opacity:0;pointer-events:none;transition:.25s;z-index:60;max-width:88vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%)}
+.seg.scope{margin:0 0 .9rem}
+.warnbox{background:var(--dangerbg);color:var(--red);border-radius:1.25rem;padding:.8rem 1rem;margin-bottom:.9rem;font-weight:700;font-size:.9375rem}
+.fcode{font-family:ui-monospace,Menlo,monospace;font-size:1.75rem;font-weight:800;letter-spacing:.18em;text-align:center;background:var(--pink-l);border-radius:1.25rem;padding:.9rem;margin:.5rem 0}
+.mem{display:flex;align-items:center;gap:.6rem;padding:.55rem .2rem;font-weight:700}
+.mem i{font-style:normal;background:var(--pink-l);border-radius:50%;width:2rem;height:2rem;display:flex;align-items:center;justify-content:center}
+.tog{display:flex;align-items:center;justify-content:space-between;padding:.6rem .25rem;font-weight:700}
+.tog button{padding:.4rem .9rem;border-radius:1rem;background:var(--pink-l);color:var(--pink-d);font-weight:800}
+.tog button.on{background:var(--pink-d);color:#fff}
+textarea.csv{width:100%;height:12rem;border:2px solid var(--pink-l);border-radius:1rem;padding:.6rem;font-size:.8rem;background:var(--card);color:var(--ink)}
+.rec{display:flex;justify-content:space-between;gap:.5rem;padding:.55rem .25rem;font-weight:700;border-bottom:1px solid var(--pink-l)}
+.rec span{color:var(--muted);font-weight:600}
 .ver{text-align:center;color:var(--muted);font-size:0.8125rem;margin-top:1.5rem;font-weight:600}
 </style>
 </head>
@@ -258,19 +269,28 @@ var THEMES = {
 };
 var SCALES = {s:{n:'Мельче',k:0.78}, m:{n:'Обычный',k:0.86}, l:{n:'Крупнее',k:1}};
 function applyTheme(){
-  var t = THEMES[S.theme] ? S.theme : 'pink';
+  var t = THEMES[P().theme] ? P().theme : 'pink';
   document.documentElement.setAttribute('data-theme', t);
-  document.documentElement.style.fontSize = (16 * SCALES[SCALES[S.scale] ? S.scale : 'm'].k) + 'px';
+  document.documentElement.style.fontSize = (16 * SCALES[SCALES[P().scale] ? P().scale : 'm'].k) + 'px';
   var m = document.querySelector('meta[name=theme-color]'); if (m) m.setAttribute('content', THEMES[t].bg);
   if (tg) { try { tg.setHeaderColor(THEMES[t].bg); tg.setBackgroundColor(THEMES[t].bg); } catch(e){} }
 }
 /* ---------- Синхронизация с сервером ---------- */
-var rev = 0, inflight = false, pending = false, dirty = false, blocked = false, pushT = null, retryT = null, BOT = '';
+function newSlot(){ return {s: null, rev: 0, inflight: false, pending: false, dirty: false, pushT: null, retryT: null}; }
+var slots = {me: newSlot(), fam: newSlot()};
+slots.me.s = S;
+var scope = 'me', BOT = '', FAM = null, PREFS = {remind: false, weekly: false, hour: 20};
+var blocked = false;
 var syncState = ONLINE ? 'wait' : 'local';
-
-function wire(){ return JSON.parse(JSON.stringify(S, function(k, v){ return k === 'img' ? undefined : v; })); }   // фото уходят отдельно
-function cacheLocal(){
-  try { localStorage.setItem(KEY, JSON.stringify(ONLINE ? wire() : S)); }
+function P(){ return slots.me.s; }                       // личные данные (тема, размер, имя)
+function qs(sc){ return sc === 'fam' ? '?scope=family' : ''; }
+function keyOf(sc){ return sc === 'fam' ? KEY + '_fam' : KEY; }
+function strip(st){ return JSON.parse(JSON.stringify(st, function(k, v){ return k === 'img' ? undefined : v; })); }   // фото уходят отдельно
+function wire(){ return strip(S); }
+function setState(sc, st){ slots[sc].s = st; if (scope === sc) S = st; }
+function cacheLocal(sc){
+  sc = sc || scope;
+  try { localStorage.setItem(keyOf(sc), JSON.stringify(ONLINE ? strip(slots[sc].s) : slots[sc].s)); }
   catch(e){ toast('Не удалось сохранить на устройстве: не хватает места'); }
 }
 function api(method, path, body){
@@ -287,6 +307,7 @@ function normalize(s){
   var d = defaults();
   if (!s || typeof s !== 'object') return d;
   ['cats','goals','ops'].forEach(function(k){ if (!Array.isArray(s[k])) s[k] = d[k]; });
+  if (!Array.isArray(s.recurring)) s.recurring = [];
   if (!s.income || typeof s.income !== 'object') s.income = {};
   if (typeof s.defaultIncome !== 'number') s.defaultIncome = d.defaultIncome;
   if (typeof s.name !== 'string') s.name = '';
@@ -296,28 +317,41 @@ function normalize(s){
   if (!s.goals.some(function(g){ return g.id === s.mainGoal; })) s.mainGoal = s.goals[0] ? s.goals[0].id : '';
   return s;
 }
-function save(){
-  cacheLocal();
-  if (ONLINE && !blocked) { dirty = true; clearTimeout(pushT); pushT = setTimeout(push, 500); }
-}
-function push(){
+function famDefaults(){ var d = defaults(); d.goals = []; d.mainGoal = ''; d.defaultIncome = 0; d.onboarded = true; return d; }
+function markDirty(sc){
+  cacheLocal(sc);
   if (!ONLINE || blocked) return;
-  if (inflight) { pending = true; return; }
-  inflight = true; pending = false; dirty = false;
-  api('PUT', '/api/state', {state: wire(), rev: rev}).then(function(r){
-    rev = r.rev; syncState = 'ok';
+  var sl = slots[sc]; sl.dirty = true; clearTimeout(sl.pushT); sl.pushT = setTimeout(function(){ push(sc); }, 500);
+}
+function save(){ slots[scope].s = S; markDirty(scope); }
+function push(sc){
+  sc = sc || scope;
+  var sl = slots[sc];
+  if (!ONLINE || blocked || !sl.s) return;
+  if (sl.inflight) { sl.pending = true; return; }
+  sl.inflight = true; sl.pending = false; sl.dirty = false;
+  api('PUT', '/api/state' + qs(sc), {state: strip(sl.s), rev: sl.rev}).then(function(r){
+    sl.rev = r.rev; syncState = 'ok';
   }).catch(function(e){
     if (e.status === 409 && e.data && e.data.state) {
-      S = normalize(e.data.state); rev = e.data.rev; syncState = 'ok'; cacheLocal(); render();
-      toast('Данные обновлены с другого устройства');
+      setState(sc, normalize(e.data.state)); sl.rev = e.data.rev; syncState = 'ok'; cacheLocal(sc); render();
+      toast(sc === 'fam' ? 'Партнёр внёс изменения — данные обновлены' : 'Данные обновлены с другого устройства');
     } else if (e.status === 401) {
       syncState = 'offline'; toast('Сессия истекла. Откройте приложение заново');
+    } else if (e.status === 402) {
+      syncState = 'ok'; toast('Для семейного бюджета нужна подписка');
     } else {
-      syncState = 'offline'; dirty = true;
-      clearTimeout(retryT); retryT = setTimeout(push, 6000);
+      syncState = 'offline'; sl.dirty = true;
+      clearTimeout(sl.retryT); sl.retryT = setTimeout(function(){ push(sc); }, 6000);
     }
-  }).then(function(){ inflight = false; if (pending) push(); });
+  }).then(function(){ sl.inflight = false; if (sl.pending) push(sc); });
 }
+function memberName(id){
+  if (id && tgUser && id === tgUser.id) return 'Вы';
+  var m = FAM && FAM.family && FAM.family.members.filter(function(x){ return x.id === id; })[0];
+  return m && m.name ? m.name : 'Партнёр';
+}
+function authorTag(o){ return scope === 'fam' && o.by ? ' · ' + esc(memberName(o.by)) : ''; }
 
 var now0 = new Date();
 var VM = {y: now0.getFullYear(), m: now0.getMonth()};
@@ -343,7 +377,7 @@ var leftOf = function(k){ return incomeOf(k) - spentOf(k) - contribOf(k); };
 var catOps = function(k,id){ return opsOf(k).filter(function(o){ return o.type === 'expense' && o.catId === id; }); };
 var catById = function(id){ return S.cats.filter(function(c){ return c.id === id; })[0]; };
 var goalById = function(id){ return S.goals.filter(function(g){ return g.id === id; })[0]; };
-var userName = function(){ return S.name || tgName || ''; };
+var userName = function(){ return P().name || tgName || ''; };
 
 /* ---------- UI helpers ---------- */
 var toastT;
@@ -376,7 +410,7 @@ function confirmBox(msg, cb){
 
 /* ---------- Views ---------- */
 function monthHeader(withHi){
-  return '<div class="top"><div>' + (withHi ? '<div class="hi">Привет' + (userName() ? ', ' + esc(userName()) : '') + '</div>' : '<div class="hi">Месяц</div>') +
+  return '<div class="top"><div>' + (withHi ? '<div class="hi">' + (scope === 'fam' ? 'Семейный бюджет' : 'Привет' + (userName() ? ', ' + esc(userName()) : '')) + '</div>' : '<div class="hi">Месяц</div>') +
     '<div class="title">' + MONTHS[VM.m] + ' ' + VM.y + '</div></div>' +
     '<div class="mnav"><button data-act="mprev" aria-label="Предыдущий месяц">‹</button><button data-act="mnext" aria-label="Следующий месяц">›</button></div></div>';
 }
@@ -445,9 +479,11 @@ function vHome(){
   if (g) h += '<div class="sec"><h2>Моя цель</h2><a data-tab="goals">Все цели</a></div>' + goalCard(g, false);
   h += '<div class="bal"><div class="lbl">'+ic('wallet',26)+' Осталось в этом месяце</div><div class="big">'+fmt(leftOf(k))+'</div>' +
     '<div class="row"><div class="mini"><span>Доход</span><b>'+fmt(incomeOf(k))+'</b></div><div class="mini"><span>Потрачено</span><b>'+fmt(spentOf(k))+'</b></div></div></div>';
+  h += overBanner(k);
   h += '<div class="card plan" data-act="plan"><div class="ico">'+ic('calc',34)+'</div><div><b>Спланировать бюджет</b><span>Распределите доход по категориям и мечте</span></div></div>';
   h += '<div class="sec"><h2>Категории</h2><a data-act="newcat">Изменить</a></div>';
   h += S.cats.length ? S.cats.map(function(c){ return catCard(c, k); }).join('') : '<div class="card empty">Категорий пока нет. Нажмите «Изменить», чтобы добавить.</div>';
+  if (ONLINE && BOT) h += '<button class="btn ghost" data-act="invite" style="margin-top:.9rem">'+ic('plus',22)+' Позвать друзей — скидка на подписку</button>';
   return h;
 }
 
@@ -470,7 +506,7 @@ function vStats(){
     var c = catById(o.catId), em = o.type === 'income' ? '💰' : (c ? c.emoji : '•');
     var title = o.note || (o.type === 'income' ? 'Доход' : (c ? c.name : 'Без категории'));
     var d = o.date.slice(8,10) + '.' + o.date.slice(5,7);
-    return '<div class="op" data-act="delop" data-id="'+o.id+'"><div class="em">'+em+'</div><div class="m"><b>'+esc(title)+'</b><span>'+d+(o.note && c ? ' · '+esc(c.name) : '')+'</span></div><div class="a '+(o.type === 'income' ? 'in' : '')+'">'+(o.type === 'income' ? '+' : '−')+fmt(o.amount)+'</div></div>';
+    return '<div class="op" data-act="delop" data-id="'+o.id+'"><div class="em">'+em+'</div><div class="m"><b>'+esc(title)+'</b><span>'+d+(o.note && c ? ' · '+esc(c.name) : '')+authorTag(o)+'</span></div><div class="a '+(o.type === 'income' ? 'in' : '')+'">'+(o.type === 'income' ? '+' : '−')+fmt(o.amount)+'</div></div>';
   }).join('') + '<div class="empty" style="padding-bottom:0.25rem;font-size:0.8125rem">Нажмите на операцию, чтобы удалить</div>' : '<div class="empty">В этом месяце операций пока нет</div>';
   return h + '</div>';
 }
@@ -515,12 +551,13 @@ function accountCard(){
 }
 function vSet(){
   return '<div class="top"><div><div class="title">Настройки</div></div></div>' +
-    '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + Object.keys(THEMES).map(function(k){ var th = THEMES[k]; return '<button class="th '+((S.theme || 'pink') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join('') + '</div></div>' +
-    '<div class="card set"><label style="margin-top:0">Размер интерфейса</label><div class="seg">' + Object.keys(SCALES).map(function(k){ return '<button class="'+((S.scale || 'm') === k ? 'on' : '')+'" data-act="scale" data-v="'+k+'">'+SCALES[k].n+'</button>'; }).join('') + '</div></div>' +
+    '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + Object.keys(THEMES).map(function(k){ var th = THEMES[k]; return '<button class="th '+((P().theme || 'pink') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join('') + '</div></div>' +
+    '<div class="card set"><label style="margin-top:0">Размер интерфейса</label><div class="seg">' + Object.keys(SCALES).map(function(k){ return '<button class="'+((P().scale || 'm') === k ? 'on' : '')+'" data-act="scale" data-v="'+k+'">'+SCALES[k].n+'</button>'; }).join('') + '</div></div>' +
     '<div class="card set">' +
-    '<label>Ваше имя</label><input class="f" id="s-name" value="'+esc(S.name)+'" placeholder="'+esc(tgName || 'Как к вам обращаться')+'">' +
+    '<label>Ваше имя</label><input class="f" id="s-name" value="'+esc(P().name)+'" placeholder="'+esc(tgName || 'Как к вам обращаться')+'">' +
     '<label>Доход в месяц по умолчанию, ₽</label><input class="f" id="s-inc" inputmode="decimal" value="'+S.defaultIncome+'">' +
     '<button class="btn big" data-act="savesettings">Сохранить</button></div>' +
+    familyCard() + refCard() + remindCard() + recurCard() + exportCard() +
     accountCard() +
     '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button></div>' +
     '<div class="ver">Копилка · ' + (ONLINE ? 'данные синхронизируются с сервером' : 'данные хранятся на этом устройстве') + '</div>';
@@ -529,7 +566,7 @@ function vSet(){
 function render(){
   applyTheme();
   var views = {home:vHome, stats:vStats, goals:vGoals, an:vAn, set:vSet};
-  $('#app').innerHTML = views[TAB]();
+  $('#app').innerHTML = (ONLINE && TAB !== 'set' ? scopeBar() : '') + views[TAB]();
   var tabs = [['home','Главная','home'],['stats','Статистика','pie'],['goals','Цели','target'],['an','Аналитика','chart'],['set','Настройки','gear']];
   $('#nav').innerHTML = tabs.map(function(t){ return '<button data-tab="'+t[0]+'" class="'+(t[0] === TAB ? 'on' : '')+'"><span class="i">'+ic(t[2],26)+'</span>'+t[1]+'</button>'; }).join('');
   $('#fab').style.display = (TAB === 'home' || TAB === 'stats') ? 'flex' : 'none';
@@ -667,10 +704,19 @@ var ACT = {
     var a = num($('#f-amt').value);
     if (a <= 0) { toast('Введите сумму'); return; }
     var date = $('#f-date').value || today();
-    S.ops.push({id: uid(), type: opType, amount: a, catId: opType === 'expense' ? opCat : '', note: $('#f-note').value.trim(), date: date, t: Date.now()});
+    var limitMsg = '';
+    if (opType === 'expense') {
+      var cc = catById(opCat);
+      if (cc && cc.limit > 0) {
+        var bf = sum(catOps(date.slice(0,7), cc.id).map(function(o){ return o.amount; })), af = bf + a;
+        if (af > cc.limit && bf <= cc.limit) limitMsg = '⚠️ Лимит по «' + cc.name + '» превышен';
+        else if (af >= cc.limit * 0.8 && bf < cc.limit * 0.8) limitMsg = 'Почти лимит по «' + cc.name + '»: ' + Math.round(af / cc.limit * 100) + '%';
+      }
+    }
+    S.ops.push({id: uid(), type: opType, amount: a, catId: opType === 'expense' ? opCat : '', note: $('#f-note').value.trim(), date: date, t: Date.now(), by: tgUser ? tgUser.id : 0});
     save(); closeSheet(); haptic('medium');
     var ok = date.slice(0,7); var p = ok.split('-'); VM.y = +p[0]; VM.m = +p[1] - 1;
-    render(); toast(opType === 'expense' ? 'Расход добавлен' : 'Доход добавлен');
+    render(); toast(limitMsg || (opType === 'expense' ? 'Расход добавлен' : 'Доход добавлен'));
   },
   saveplan: function(){
     S.income[curKey()] = num($('#p-inc').value);
@@ -681,15 +727,15 @@ var ACT = {
   gidea: function(d){ $('#g-name').value = d.v; },
   gmonths: function(d){ $('#g-months').value = d.v; updGoal(); },
   invite: function(){
-    var link = 'https://t.me/' + BOT, text = 'Считаю расходы и коплю на цели в Копилке. Заходи!';
+    var link = 'https://t.me/' + BOT, text = 'Считаю расходы и коплю на цели в Копилке. Заходи!' + (REF && REF.code ? ' Мой код друга: ' + REF.code + ' (введи его в Настройках — получишь бонус).' : '');
     var url = 'https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text);
     if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank');
   },
   delaccount: function(){
     confirmBox('Удалить все ваши данные с сервера? Это нельзя отменить.', function(){
       api('DELETE', '/api/account').then(function(){
-        S = defaults(); rev = 0; dirty = false;
-        try { localStorage.removeItem(KEY); } catch(e){}
+        S = defaults(); slots.me = newSlot(); slots.me.s = S; slots.fam = newSlot(); scope = 'me'; FAM = null;
+        try { localStorage.removeItem(KEY); localStorage.removeItem(KEY + '_fam'); } catch(e){}
         render(); toast('Данные удалены');
       }).catch(function(){ toast('Не удалось удалить. Попробуйте позже'); });
     });
@@ -735,13 +781,79 @@ var ACT = {
     toast(a > 0 ? 'Отложено ' + fmt(a) : 'Снято ' + fmt(-a));
   },
   savesettings: function(){
-    S.name = $('#s-name').value.trim(); S.defaultIncome = num($('#s-inc').value);
-    save(); toast('Сохранено');
+    P().name = $('#s-name').value.trim(); S.defaultIncome = num($('#s-inc').value);
+    markDirty('me'); save(); toast('Сохранено');
   },
-  theme: function(d){ S.theme = d.v; save(); haptic(); render(); },
-  scale: function(d){ S.scale = d.v; save(); haptic(); render(); },
+  theme: function(d){ P().theme = d.v; markDirty('me'); haptic(); render(); },
+  scale: function(d){ P().scale = d.v; markDirty('me'); haptic(); render(); },
+  scope: function(d){ setScope(d.v); },
+  openfam: function(){ openFamily(); },
+  famcreate: function(){
+    api('POST', '/api/family/create').then(function(r){ FAM = r; slots.fam = newSlot(); closeSheet(); setScope('fam'); toast('Семья создана. Отправьте код партнёру'); setTimeout(openFamily, 400); })
+      .catch(function(e){ toast(e.status === 402 ? 'Для создания семьи нужна подписка' : 'Не удалось создать семью'); });
+  },
+  famjoin: function(){
+    var code = ($('#fam-code').value || '').trim();
+    if (!code) { toast('Введите код'); return; }
+    api('POST', '/api/family/join', {code: code}).then(function(r){ FAM = r; slots.fam = newSlot(); closeSheet(); setScope('fam'); toast('Вы в семье 💞'); })
+      .catch(function(e){ toast(e.status === 404 ? 'Код не подошёл' : e.status === 409 ? 'В этой семье нет мест' : 'Не удалось вступить'); });
+  },
+  famshare: function(){
+    var f = FAM && FAM.family; if (!f) return;
+    var link = 'https://t.me/' + (BOT || ''), text = 'Давай вести семейный бюджет в Копилке 💞 Открой бота, вкладка «Семья ＋» → введи код: ' + f.code;
+    var url = 'https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text);
+    if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank');
+  },
+  famleave: function(){
+    confirmBox('Выйти из семьи? Общие данные останутся у партнёра, ваши личные не пострадают.', function(){
+      api('POST', '/api/family/leave').then(function(r){
+        if (scope === 'fam') { slots.fam.s = S; scope = 'me'; S = slots.me.s; }
+        slots.fam = newSlot(); try { localStorage.removeItem(KEY + '_fam'); } catch(e){}
+        FAM = r; closeSheet(); render(); toast('Вы вышли из семьи');
+      }).catch(function(){ toast('Не удалось выйти'); });
+    });
+  },
+  remtog: function(d){ PREFS[d.k] = !PREFS[d.k]; savePrefs(); render(); },
+  remhour: function(d){ PREFS.hour = Number(d.v); savePrefs(); render(); },
+  newrec: function(){ openRecur(); },
+  reccat: function(d, el){ recCat = d.id; document.querySelectorAll('[data-act="reccat"]').forEach(function(b){ b.classList.toggle('on', b === el); }); },
+  saverec: function(){
+    var name = $('#r-name').value.trim(), a = num($('#r-amt').value), day = Math.min(28, Math.max(1, Math.round(num($('#r-day').value) || 1)));
+    if (!name) { toast('Введите название'); return; }
+    if (a <= 0) { toast('Введите сумму'); return; }
+    var n = new Date();
+    S.recurring.push({id: uid(), name: name, amount: a, catId: recCat, day: day, from: mk(n.getFullYear(), n.getMonth())});
+    applyRecurring(); save(); closeSheet(); render(); toast('Платёж добавлен');
+  },
+  delrec: function(d){
+    var r = S.recurring.filter(function(x){ return x.id === d.id; })[0]; if (!r) return;
+    confirmBox('Удалить регулярный платёж «' + r.name + '»? Уже добавленные операции останутся.', function(){ S.recurring = S.recurring.filter(function(x){ return x.id !== d.id; }); save(); render(); });
+  },
+  export: function(){
+    sheet('<h3>Операции в CSV</h3><div class="hi" style="font-weight:600;margin:.2rem 0 .6rem">Скопируйте и вставьте в Excel или Google Таблицы (разделитель — точка с запятой).</div><textarea class="csv" id="csv-text" readonly></textarea>' +
+      '<button class="btn big" data-act="copycsv">Скопировать</button>');
+    $('#csv-text').value = csvText();
+  },
+  copycsv: function(){ copyText($('#csv-text').value); },
+  onboardskip: function(){ S.onboarded = true; save(); closeSheet(); render(); },
+  onboarddone: function(){
+    var inc = num($('#o-inc').value), name = $('#o-goal').value.trim(), t = num($('#o-target').value), mo = Math.round(num($('#o-months').value));
+    if (inc > 0) S.defaultIncome = inc;
+    if (name && t > 0) {
+      var g = {id: uid(), name: name, target: t, img: '', contribs: []};
+      if (mo > 0) { g.months = mo; g.start = today(); }
+      S.goals = [g]; S.mainGoal = g.id;
+    }
+    S.onboarded = true; save(); closeSheet(); render();
+    toast('Готово! Теперь добавьте первую трату'); setTimeout(function(){ if (!$('#sheet').classList.contains('on')) openOp(); }, 900);
+  },
+  refuse: function(){
+    var code = ($('#ref-code').value || '').trim(); if (!code) { toast('Введите код'); return; }
+    api('POST', '/api/ref/use', {code: code}).then(function(r){ REF = r; render(); toast('Код принят'); })
+      .catch(function(e){ toast(e.status === 404 ? 'Такого кода нет' : e.status === 409 ? 'Код уже применён' : 'Не удалось применить'); });
+  },
   reset: function(){
-    confirmBox('Удалить все данные и начать заново?', function(){ var th = S.theme, sc = S.scale; S = defaults(); S.theme = th; S.scale = sc; save(); render(); toast('Данные сброшены'); });
+    confirmBox('Удалить все данные и начать заново?', function(){ var th = S.theme, sc = S.scale; S = scope === 'fam' ? famDefaults() : defaults(); S.theme = th; S.scale = sc; save(); render(); toast('Данные сброшены'); });
   }
 };
 
@@ -802,7 +914,7 @@ $('#file').addEventListener('change', function(e){
       var g = goalById(pendingGoal);
       if (g) {
         g.img = c.toDataURL('image/jpeg', .75); save(); render();
-        if (ONLINE) api('PUT', '/api/img/' + g.id, {img: g.img}).catch(function(){ toast('Не удалось загрузить фото на сервер'); });
+        if (ONLINE) api('PUT', '/api/img/' + g.id + qs(scope), {img: g.img}).catch(function(){ toast('Не удалось загрузить фото на сервер'); });
       }
     };
     im.src = r.result;
@@ -812,45 +924,215 @@ $('#file').addEventListener('change', function(e){
 
 $('#fab').innerHTML = ic('plus', 34);
 
+
+/* ---------- Семья, регулярные платежи, напоминания, экспорт ---------- */
+var REF = null, recCat = '';
+function scopeBar(){
+  return '<div class="seg scope"><button class="'+(scope === 'me' ? 'on' : '')+'" data-act="scope" data-v="me">Личный</button>' +
+    '<button class="'+(scope === 'fam' ? 'on' : '')+'" data-act="scope" data-v="fam">'+(FAM && FAM.family ? 'Семья' : 'Семья ＋')+'</button></div>';
+}
+function overBanner(k){
+  var over = S.cats.filter(function(c){ return c.limit > 0 && sum(catOps(k, c.id).map(function(o){ return o.amount; })) > c.limit; });
+  return over.length ? '<div class="warnbox">⚠️ Превышен лимит: ' + over.map(function(c){ return esc(c.emoji + ' ' + c.name); }).join(', ') + '</div>' : '';
+}
+function loadFamInfo(){
+  return api('GET', '/api/family').then(function(r){ FAM = r; return r; });
+}
+function loadFam(){
+  var sl = slots.fam;
+  return api('GET', '/api/state?scope=family').then(function(r){
+    if (r.state) { sl.s = normalize(r.state); sl.rev = r.rev; cacheLocal('fam'); }
+    else { sl.s = famDefaults(); sl.rev = r.rev || 0; markDirty('fam'); }
+  }).catch(function(e){
+    var c = null; try { c = JSON.parse(localStorage.getItem(keyOf('fam'))); } catch(x){}
+    if (c && c.cats) { sl.s = normalize(c); return; }
+    throw e;
+  });
+}
+function setScope(to){
+  if (to === scope) return;
+  if (to === 'fam') {
+    if (!FAM || !FAM.family) { openFamily(); return; }
+    var go = function(){ slots[scope].s = S; scope = 'fam'; S = slots.fam.s; applyRecurring(); render(); haptic('light'); };
+    if (slots.fam.s) go(); else loadFam().then(go).catch(function(){ toast('Не удалось загрузить семью'); });
+  } else {
+    slots[scope].s = S; scope = 'me'; S = slots.me.s; render(); haptic('light');
+  }
+}
+function openFamily(){
+  if (!FAM) { loadFamInfo().then(openFamily).catch(function(){ toast('Нет связи с сервером'); }); return; }
+  var f = FAM.family;
+  if (!f) {
+    sheet('<h3>Семейный бюджет</h3>' +
+      '<div class="hi" style="margin:.2rem 0 .6rem;font-weight:600">Общий бюджет, цели и траты на двоих. У каждого свой Telegram, а личные данные остаются только вашими: переключайтесь между «Личный» и «Семья».</div>' +
+      (FAM.paid && !FAM.premium ? '<div class="warnbox">Создать семью можно с подпиской. Присоединиться к семье по коду партнёра можно бесплатно.</div>' : '') +
+      '<label>Уже есть код от партнёра?</label><input id="fam-code" placeholder="Например, K7M2QX9P" autocomplete="off" autocapitalize="characters" maxlength="12">' +
+      '<button class="btn ghost" style="margin-top:.6rem" data-act="famjoin">Вступить в семью</button>' +
+      '<button class="btn big" data-act="famcreate">Создать семью</button>');
+    return;
+  }
+  sheet('<h3>Наша семья</h3>' +
+    f.members.map(function(m){ return '<div class="mem"><i>'+esc((m.name || '?').slice(0,1).toUpperCase())+'</i>'+esc(m.name || 'Участник')+(tgUser && m.id === tgUser.id ? ' (вы)' : '')+'</div>'; }).join('') +
+    (f.members.length < FAM.max ? '<label>Код для партнёра</label><div class="fcode">'+esc(f.code)+'</div>' +
+      '<div class="hi" style="font-size:.85rem;text-align:center;margin:0 0 .6rem">Партнёр открывает бота → вкладка «Семья ＋» → вводит код</div>' +
+      '<button class="btn big" data-act="famshare">Отправить приглашение</button>' : '<div class="hi" style="margin:.6rem 0">Вы вдвоём — всё общее на месте 💞</div>') +
+    '<button class="btn danger" style="margin-top:.8rem" data-act="famleave">Выйти из семьи</button>');
+}
+function familyCard(){
+  if (!ONLINE) return '';
+  var f = FAM && FAM.family;
+  return '<div class="card set"><label style="margin-top:0">Семейный бюджет</label>' +
+    '<div class="hi" style="margin:0 0.25rem .7rem;font-weight:600">' + (f ? 'В семье: ' + f.members.map(function(m){ return esc(m.name || 'Участник'); }).join(' и ') : 'Ведите общий бюджет с партнёром') + '</div>' +
+    '<button class="btn ghost" data-act="openfam">' + (f ? 'Управлять семьёй' : 'Создать семью или вступить') + '</button></div>';
+}
+function refCard(){
+  if (!ONLINE || !REF) return '';
+  var tiers = 'за 1 друга −10%, за 3 −20%, за 5 −50%';
+  return '<div class="card set"><label style="margin-top:0">Скидка за друзей</label>' +
+    '<div class="hi" style="margin:0 .25rem .5rem;font-weight:600">' + tiers + '. Скидка считается, когда друг оформил подписку.</div>' +
+    '<div class="fcode">' + esc(REF.code) + '</div>' +
+    '<div class="hi" style="margin:0 .25rem .6rem;font-size:.9rem;text-align:center">Пришли друзей: ' + REF.invited + ' · оплатили: ' + REF.paying + ' · ваша скидка: <b style="color:var(--ink)">' + REF.discount + '%</b></div>' +
+    (BOT ? '<button class="btn ghost" data-act="invite">'+ic('plus',22)+' Позвать друзей</button>' : '') +
+    (REF.referred ? '' : '<label>Вас пригласил друг? Введите его код</label><div class="row2"><input class="f" id="ref-code" placeholder="Код друга" maxlength="12" autocapitalize="characters" style="flex:1;margin:0"><button class="chip" data-act="refuse">Применить</button></div>') +
+    '</div>';
+}
+function remindCard(){
+  if (!ONLINE) return '';
+  var hrs = [9, 12, 18, 20, 21];
+  return '<div class="card set"><label style="margin-top:0">Напоминания в боте</label>' +
+    '<div class="tog"><span>Если не записали траты за день</span><button class="'+(PREFS.remind ? 'on' : '')+'" data-act="remtog" data-k="remind">'+(PREFS.remind ? 'Вкл' : 'Выкл')+'</button></div>' +
+    '<div class="tog"><span>Итоги недели по понедельникам</span><button class="'+(PREFS.weekly ? 'on' : '')+'" data-act="remtog" data-k="weekly">'+(PREFS.weekly ? 'Вкл' : 'Выкл')+'</button></div>' +
+    '<label>Во сколько присылать</label><div class="chips">' + hrs.map(function(h){ return '<button class="chip '+(PREFS.hour === h ? 'on' : '')+'" data-act="remhour" data-v="'+h+'">'+h+':00</button>'; }).join('') + '</div>' +
+    '<div class="hi" style="margin:.7rem .25rem 0;font-size:.8rem;font-weight:600">Чтобы сообщения приходили, нажмите «Start» в чате с ботом.</div></div>';
+}
+function savePrefs(){
+  api('PUT', '/api/prefs', {remind: PREFS.remind, weekly: PREFS.weekly, hour: PREFS.hour, tz: -new Date().getTimezoneOffset()}).catch(function(){ toast('Не удалось сохранить'); });
+}
+function recurCard(){
+  var list = S.recurring || [];
+  return '<div class="card set"><label style="margin-top:0">Регулярные платежи</label>' +
+    (list.length ? list.map(function(r){ var c = catById(r.catId); return '<div class="rec" data-act="delrec" data-id="'+r.id+'"><div>'+esc(c ? c.emoji + ' ' : '')+esc(r.name)+'<br><span>каждого '+r.day+'-го числа</span></div><b>'+fmt(r.amount)+'</b></div>'; }).join('') +
+      '<div class="hi" style="margin:.4rem .25rem .6rem;font-size:.8rem;font-weight:600">Нажмите на платёж, чтобы удалить</div>'
+      : '<div class="hi" style="margin:0 .25rem .6rem;font-weight:600">Аренда, кредит, подписки: добавятся сами каждый месяц.</div>') +
+    '<button class="btn ghost" data-act="newrec">'+ic('plus',22)+' Добавить платёж</button></div>';
+}
+function openRecur(){
+  recCat = S.cats[0] ? S.cats[0].id : '';
+  sheet('<h3>Регулярный платёж</h3><label>Название</label><input id="r-name" placeholder="Например, Аренда" autocomplete="off">' +
+    '<label>Сумма, ₽</label><input id="r-amt" inputmode="decimal" placeholder="0" autocomplete="off">' +
+    '<label>Категория</label><div class="cgrid">' + S.cats.map(function(c){ return '<button class="cg '+(c.id === recCat ? 'on' : '')+'" data-act="reccat" data-id="'+c.id+'"><b>'+esc(c.emoji)+'</b>'+esc(c.name)+'</button>'; }).join('') + '</div>' +
+    '<label>Числа месяца (1–28)</label><input id="r-day" inputmode="numeric" value="1" autocomplete="off">' +
+    '<button class="btn big" data-act="saverec">Добавить</button>');
+}
+function applyRecurring(){
+  if (!S || !S.recurring || !S.recurring.length) return;
+  var n = new Date(), cur = mk(n.getFullYear(), n.getMonth()), added = false, have = {};
+  S.ops.forEach(function(o){ if (o.rid) have[o.rid] = 1; });
+  S.recurring.forEach(function(r){
+    var y, m;
+    if (r.done) { y = +r.done.slice(0,4); m = +r.done.slice(5,7); if (m > 11) { m = 0; y++; } }
+    else { y = +r.from.slice(0,4); m = +r.from.slice(5,7) - 1; }
+    for (var guard = 0; guard < 48; guard++) {
+      var key = mk(y, m); if (key > cur) break;
+      var day = Math.min(r.day, new Date(y, m + 1, 0).getDate()), date = key + '-' + pad(day), rid = r.id + '_' + key;
+      if (key === cur && date > today()) break;
+      if (!have[rid]) { S.ops.push({id: uid(), rid: rid, type: 'expense', amount: r.amount, catId: r.catId, note: r.name, date: date, t: Date.now(), by: 0, auto: 1}); have[rid] = 1; }
+      r.done = key; added = true;
+      m++; if (m > 11) { m = 0; y++; }
+    }
+  });
+  if (added) save();
+}
+function exportCard(){
+  return '<div class="card set"><label style="margin-top:0">Экспорт</label><button class="btn ghost" data-act="export">Выгрузить операции (CSV для Excel)</button></div>';
+}
+function csvText(){
+  var q = function(v){ v = String(v == null ? '' : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  var rows = [['Дата','Тип','Категория','Сумма','Комментарий','Кто']];
+  S.ops.slice().sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : a.t - b.t; }).forEach(function(o){
+    var c = catById(o.catId);
+    rows.push([o.date, o.type === 'income' ? 'Доход' : 'Расход', c ? c.name : '', o.amount, o.note || '', scope === 'fam' && o.by ? memberName(o.by) : '']);
+  });
+  return rows.map(function(r){ return r.map(q).join(';'); }).join('\n');
+}
+function openOnboard(){
+  var inc = S.defaultIncome || '';
+  sheet('<h3>Давайте настроим Копилку</h3>' +
+    '<div class="hi" style="margin:.2rem 0 .4rem;font-weight:600">Три вопроса, и приложение посчитает, сколько откладывать.</div>' +
+    '<label>1. Ваш доход в месяц, ₽</label><input id="o-inc" inputmode="decimal" value="'+inc+'" placeholder="Например, 90000" autocomplete="off">' +
+    '<label>2. На что копите?</label><input id="o-goal" placeholder="Например, Отпуск" autocomplete="off">' +
+    '<div class="row2" style="margin-top:.5rem"><input id="o-target" inputmode="decimal" placeholder="Сумма цели, ₽" style="flex:1" autocomplete="off"><input id="o-months" inputmode="numeric" placeholder="За сколько мес." style="flex:1" autocomplete="off"></div>' +
+    '<button class="btn ghost" style="margin-top:.8rem" data-act="onboardskip">Пропустить</button>' +
+    '<button class="btn big" data-act="onboarddone">Готово</button>');
+}
+function maybeOnboard(){
+  if (scope === 'me' && S && !S.onboarded && S.ops.length === 0) setTimeout(function(){ if (!$('#sheet').classList.contains('on')) openOnboard(); }, 400);
+}
+function copyText(t){
+  try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(function(){ toast('Скопировано'); }, function(){ fallbackCopy(t); }); return; } } catch(e){}
+  fallbackCopy(t);
+}
+function fallbackCopy(t){
+  var ta = $('#csv-text');
+  if (ta) { ta.focus(); ta.select(); try { document.execCommand('copy'); toast('Скопировано'); return; } catch(e){} }
+  toast('Выделите текст и скопируйте вручную');
+}
+
+function loadExtras(){
+  if (!ONLINE) return;
+  loadFamInfo().then(function(){ if (TAB === 'set' || TAB === 'home') render(); }).catch(function(){});
+  api('GET', '/api/prefs').then(function(r){ PREFS = {remind: !!r.remind, weekly: !!r.weekly, hour: r.hour || 20}; if (TAB === 'set') render(); }).catch(function(){});
+  api('GET', '/api/ref').then(function(r){ REF = r; if (TAB === 'set') render(); }).catch(function(){});
+}
 function boot(){
   applyTheme();
-  if (!ONLINE) { render(); return; }
+  if (!ONLINE) { applyRecurring(); render(); maybeOnboard(); return; }
   $('#nav').style.display = 'none'; $('#fab').style.display = 'none';
   $('#app').innerHTML = '<div class="empty" style="padding-top:38vh;font-size:1.125rem">Загрузка…</div>';
   api('GET', '/api/state').then(function(r){
     if (typeof r.rev !== 'number') { var nb = new Error('no backend'); nb.status = 404; throw nb; }
     BOT = r.bot || '';
-    if (r.state) { S = normalize(r.state); rev = r.rev; cacheLocal(); }
+    if (r.state) { setState('me', normalize(r.state)); slots.me.rev = r.rev; cacheLocal('me'); }
     else {
-      S = normalize(S);   // новый пользователь: отправляем начальные данные на сервер
+      setState('me', normalize(S));   // новый пользователь: отправляем начальные данные на сервер
       S.goals.forEach(function(g){ if (g.img) api('PUT', '/api/img/' + g.id, {img: g.img}).catch(function(){}); });
       save();
     }
     syncState = 'ok';
   }).catch(function(e){
     if (e.status === 404 || e.status === 405) {   // сервера нет (например, GitHub Pages): храним данные на телефоне
-      ONLINE = false; syncState = 'local'; S = normalize(S); return;
+      ONLINE = false; syncState = 'local'; setState('me', normalize(S)); return;
     }
     if (e.status === 401) {
       blocked = true;
       $('#app').innerHTML = '<div class="card empty">Не удалось войти. Закройте приложение и откройте его заново через бота в Telegram.</div>';
       return;
     }
-    S = normalize(S); syncState = 'offline'; toast('Нет связи с сервером. Работаю офлайн');
+    setState('me', normalize(S)); syncState = 'offline'; toast('Нет связи с сервером. Работаю офлайн');
   }).then(function(){
     if (blocked) return;
+    applyRecurring();
     $('#nav').style.display = ''; render();
+    loadExtras(); maybeOnboard();
   });
 }
 
+function pull(sc){
+  var sl = slots[sc];
+  if (!sl.s || sl.inflight || sl.pending || sl.dirty) return;
+  (sc === 'fam' ? loadFamInfo().catch(function(){}) : Promise.resolve()).then(function(){ return api('GET', '/api/state' + qs(sc)); }).then(function(r){
+    if (r.state && r.rev > sl.rev && !sl.dirty && !sl.inflight) {
+      setState(sc, normalize(r.state)); sl.rev = r.rev; syncState = 'ok'; cacheLocal(sc);
+      if (!$('#sheet').classList.contains('on')) render();
+    }
+  }).catch(function(){});
+}
 document.addEventListener('visibilitychange', function(){
   if (!ONLINE || blocked) return;
-  if (document.hidden) { if (dirty) { clearTimeout(pushT); push(); } return; }
-  if (inflight || pending || dirty) return;
-  api('GET', '/api/state').then(function(r){
-    if (r.state && r.rev > rev) { S = normalize(r.state); rev = r.rev; syncState = 'ok'; cacheLocal(); render(); }
-  }).catch(function(){});
+  if (document.hidden) { ['me', 'fam'].forEach(function(sc){ if (slots[sc].dirty) { clearTimeout(slots[sc].pushT); push(sc); } }); return; }
+  pull('me'); if (FAM && FAM.family && slots.fam.s) pull('fam');
 });
+setInterval(function(){ if (ONLINE && !blocked && !document.hidden && scope === 'fam') pull('fam'); }, 20000);
 
 boot();
 })();

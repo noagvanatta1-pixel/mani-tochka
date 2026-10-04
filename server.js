@@ -51,6 +51,27 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS states (
     user_id INTEGER PRIMARY KEY, rev INTEGER NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS families (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, created_by INTEGER NOT NULL, created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS members (
+    user_id INTEGER PRIMARY KEY, family_id INTEGER NOT NULL, joined_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS members_family ON members (family_id);
+  CREATE TABLE IF NOT EXISTS premium (
+    user_id INTEGER PRIMARY KEY, until INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS prefs (
+    user_id INTEGER PRIMARY KEY, remind INTEGER NOT NULL DEFAULT 0, hour INTEGER NOT NULL DEFAULT 20,
+    tz INTEGER NOT NULL DEFAULT 180, last_sent TEXT NOT NULL DEFAULT '',
+    weekly INTEGER NOT NULL DEFAULT 0, last_week TEXT NOT NULL DEFAULT ''
+  );
+  CREATE TABLE IF NOT EXISTS refcodes (
+    user_id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE
+  );
+  CREATE TABLE IF NOT EXISTS referrals (
+    user_id INTEGER PRIMARY KEY, referrer_id INTEGER NOT NULL, created_at INTEGER NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS images (
     user_id INTEGER NOT NULL, goal_id TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, goal_id)
@@ -72,7 +93,39 @@ const q = {
   delImages: db.prepare('DELETE FROM images WHERE user_id = ?'),
   delState: db.prepare('DELETE FROM states WHERE user_id = ?'),
   delUser: db.prepare('DELETE FROM users WHERE id = ?'),
+  famOf: db.prepare('SELECT family_id FROM members WHERE user_id = ?'),
+  famById: db.prepare('SELECT id, code FROM families WHERE id = ?'),
+  famByCode: db.prepare('SELECT id, code FROM families WHERE code = ?'),
+  famMembers: db.prepare(`SELECT m.user_id AS id, COALESCE(u.first_name, '') AS name FROM members m
+    LEFT JOIN users u ON u.id = m.user_id WHERE m.family_id = ? ORDER BY m.joined_at`),
+  famCount: db.prepare('SELECT COUNT(*) AS n FROM members WHERE family_id = ?'),
+  insFam: db.prepare('INSERT INTO families (code, created_by, created_at) VALUES (?, ?, ?)'),
+  insMember: db.prepare('INSERT INTO members (user_id, family_id, joined_at) VALUES (?, ?, ?)'),
+  delMember: db.prepare('DELETE FROM members WHERE user_id = ?'),
+  setCode: db.prepare('UPDATE families SET code = ? WHERE id = ?'),
+  delFam: db.prepare('DELETE FROM families WHERE id = ?'),
+  premiumOf: db.prepare('SELECT until FROM premium WHERE user_id = ?'),
+  famPremium: db.prepare(`SELECT MAX(p.until) AS until FROM premium p JOIN members m ON m.user_id = p.user_id WHERE m.family_id = ?`),
+  getPrefs: db.prepare('SELECT remind, weekly, hour, tz FROM prefs WHERE user_id = ?'),
+  putPrefs: db.prepare(`INSERT INTO prefs (user_id, remind, weekly, hour, tz) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET remind = excluded.remind, weekly = excluded.weekly, hour = excluded.hour, tz = excluded.tz`),
+  delPrefs: db.prepare('DELETE FROM prefs WHERE user_id = ?'),
+  remindList: db.prepare('SELECT user_id, remind, weekly, hour, tz, last_sent, last_week FROM prefs WHERE remind = 1 OR weekly = 1'),
+  refCodeOf: db.prepare('SELECT code FROM refcodes WHERE user_id = ?'),
+  refByCode: db.prepare('SELECT user_id FROM refcodes WHERE code = ?'),
+  insRefCode: db.prepare('INSERT INTO refcodes (user_id, code) VALUES (?, ?)'),
+  referredBy: db.prepare('SELECT referrer_id FROM referrals WHERE user_id = ?'),
+  insReferral: db.prepare('INSERT INTO referrals (user_id, referrer_id, created_at) VALUES (?, ?, ?)'),
+  refInvited: db.prepare('SELECT COUNT(*) AS n FROM referrals WHERE referrer_id = ?'),
+  refPaying: db.prepare(`SELECT COUNT(*) AS n FROM referrals r JOIN premium p ON p.user_id = r.user_id
+    WHERE r.referrer_id = ? AND p.until > ?`),
+  delRefs: db.prepare('DELETE FROM referrals WHERE user_id = ? OR referrer_id = ?'),
+  delRefCode: db.prepare('DELETE FROM refcodes WHERE user_id = ?'),
+  markWeek: db.prepare('UPDATE prefs SET last_week = ? WHERE user_id = ?'),
+  markSent: db.prepare('UPDATE prefs SET last_sent = ? WHERE user_id = ?'),
 };
+const FAMILY_MAX = Number(process.env.FAMILY_MAX) || 2;
+const FAMILY_PAID = process.env.FAMILY_PAID === '1';   // 1 = семью создаёт только подписчик
 
 function tx(fn) {
   db.exec('BEGIN IMMEDIATE');
@@ -217,6 +270,68 @@ function securityHeaders(res) {
   ].join('; '));
 }
 
+
+/* ---------- Семья ---------- */
+function newCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c = '';
+  const b = crypto.randomBytes(8);
+  for (let i = 0; i < 8; i++) c += alphabet[b[i] % alphabet.length];
+  return c;
+}
+function familyIdOf(uid) { const r = q.famOf.get(uid); return r ? r.family_id : 0; }
+function hasPremium(uid) { const r = q.premiumOf.get(uid); return !!(r && r.until > Date.now()); }
+function familyActive(fid) {
+  if (!FAMILY_PAID) return true;
+  const r = q.famPremium.get(fid);
+  return !!(r && r.until && r.until > Date.now());
+}
+function familyInfo(uid) {
+  const fid = familyIdOf(uid);
+  const base = { paid: FAMILY_PAID, premium: hasPremium(uid), max: FAMILY_MAX };
+  if (!fid) return { ...base, family: null };
+  const f = q.famById.get(fid);
+  return { ...base, family: { id: f.id, code: f.code, members: q.famMembers.all(fid), active: familyActive(fid) } };
+}
+function leaveFamily(uid) {
+  return tx(() => {
+    const fid = familyIdOf(uid);
+    if (!fid) return;
+    q.delMember.run(uid);
+    if (q.famCount.get(fid).n === 0) {
+      const owner = -fid;
+      q.delImages.run(owner); q.delState.run(owner); q.delFam.run(fid);
+    } else {
+      q.setCode.run(newCode(), fid);   // старый код больше не действует
+    }
+  });
+}
+// владелец данных: свой id или (для семьи) отрицательный id семьи
+function ownerFor(user, url, write) {
+  if (url.searchParams.get('scope') !== 'family') return user.id;
+  const fid = familyIdOf(user.id);
+  if (!fid) throw httpError(403, 'not in family');
+  if (write && !familyActive(fid)) throw httpError(402, 'subscription required');
+  return -fid;
+}
+
+
+/* ---------- Скидка за друзей ---------- */
+function refCode(uid) {
+  let r = q.refCodeOf.get(uid);
+  if (r) return r.code;
+  for (let i = 0; i < 6; i++) {
+    const c = newCode();
+    try { q.insRefCode.run(uid, c); return c; } catch (_) {}
+  }
+  throw httpError(500, 'cannot create code');
+}
+const discountFor = (n) => (n >= 5 ? 50 : n >= 3 ? 20 : n >= 1 ? 10 : 0);   // за 1 друга −10%, за 3 −20%, за 5 −50%
+function refInfo(uid) {
+  const paying = q.refPaying.get(uid, Date.now()).n;
+  return { code: refCode(uid), invited: q.refInvited.get(uid).n, paying, discount: discountFor(paying), referred: !!q.referredBy.get(uid) };
+}
+
 /* ---------- API ---------- */
 const IMG_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 let BOT_NAME = process.env.BOT_USERNAME || '';
@@ -228,14 +343,15 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/state' && m === 'GET') {
     touch(user);
-    return json(res, 200, { ...loadState(user.id), bot: BOT_NAME });
+    const owner = ownerFor(user, url, false);
+    return json(res, 200, { ...loadState(owner), bot: BOT_NAME });
   }
 
   if (p === '/api/state' && m === 'PUT') {
     const body = await readJson(req, LIMITS.stateBytes);
     if (!validState(body && body.state)) throw httpError(400, 'bad state');
     touch(user);
-    const r = saveState(user.id, body);
+    const r = saveState(ownerFor(user, url, true), body);
     if (r.conflict) return json(res, 409, { error: 'conflict', state: r.state, rev: r.rev });
     return json(res, 200, { rev: r.rev });
   }
@@ -246,19 +362,82 @@ async function handleApi(req, res, url) {
     const img = body && body.img;
     if (typeof img !== 'string' || img.length > LIMITS.imgChars || !IMG_RE.test(img)) throw httpError(400, 'bad image');
     touch(user);
+    const owner = ownerFor(user, url, true);
     tx(() => {
-      if (!q.hasImage.get(user.id, im[1]) && q.imageIds.all(user.id).length >= LIMITS.imgPerUser) throw httpError(400, 'too many images');
-      q.putImage.run(user.id, im[1], img, Date.now());
+      if (!q.hasImage.get(owner, im[1]) && q.imageIds.all(owner).length >= LIMITS.imgPerUser) throw httpError(400, 'too many images');
+      q.putImage.run(owner, im[1], img, Date.now());
     });
     return json(res, 200, { ok: true });
   }
   if (im && m === 'DELETE') {
-    q.delImage.run(user.id, im[1]);
+    q.delImage.run(ownerFor(user, url, true), im[1]);
+    return json(res, 200, { ok: true });
+  }
+
+  /* семья */
+  if (p === '/api/family' && m === 'GET') { touch(user); return json(res, 200, familyInfo(user.id)); }
+  if (p === '/api/family/create' && m === 'POST') {
+    touch(user);
+    if (familyIdOf(user.id)) throw httpError(400, 'already in family');
+    if (FAMILY_PAID && !hasPremium(user.id)) throw httpError(402, 'subscription required');
+    tx(() => {
+      let id = 0;
+      for (let i = 0; i < 5 && !id; i++) {
+        try { id = Number(q.insFam.run(newCode(), user.id, Date.now()).lastInsertRowid); } catch (_) {}
+      }
+      if (!id) throw httpError(500, 'cannot create');
+      q.insMember.run(user.id, id, Date.now());
+    });
+    return json(res, 200, familyInfo(user.id));
+  }
+  if (p === '/api/family/join' && m === 'POST') {
+    const body = await readJson(req, 2048);
+    const code = String((body && body.code) || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    touch(user);
+    if (familyIdOf(user.id)) throw httpError(400, 'already in family');
+    tx(() => {
+      const f = code.length === 8 ? q.famByCode.get(code) : null;
+      if (!f) throw httpError(404, 'wrong code');
+      if (q.famCount.get(f.id).n >= FAMILY_MAX) throw httpError(409, 'family full');
+      q.insMember.run(user.id, f.id, Date.now());
+    });
+    return json(res, 200, familyInfo(user.id));
+  }
+  if (p === '/api/family/leave' && m === 'POST') {
+    leaveFamily(user.id);
+    return json(res, 200, familyInfo(user.id));
+  }
+
+  /* скидка за друзей */
+  if (p === '/api/ref' && m === 'GET') { touch(user); return json(res, 200, refInfo(user.id)); }
+  if (p === '/api/ref/use' && m === 'POST') {
+    const body = await readJson(req, 1024);
+    const code = String((body && body.code) || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    touch(user);
+    if (q.referredBy.get(user.id)) throw httpError(409, 'already used');
+    const owner = code.length === 8 ? q.refByCode.get(code) : null;
+    if (!owner || owner.user_id === user.id) throw httpError(404, 'wrong code');
+    q.insReferral.run(user.id, owner.user_id, Date.now());
+    return json(res, 200, refInfo(user.id));
+  }
+
+  /* напоминания */
+  if (p === '/api/prefs' && m === 'GET') {
+    const r = q.getPrefs.get(user.id) || { remind: 0, weekly: 0, hour: 20, tz: 180 };
+    return json(res, 200, { remind: !!r.remind, weekly: !!r.weekly, hour: r.hour, tz: r.tz });
+  }
+  if (p === '/api/prefs' && m === 'PUT') {
+    const b = await readJson(req, 1024);
+    const hour = Math.min(23, Math.max(0, Math.round(Number(b && b.hour))));
+    const tz = Math.min(840, Math.max(-720, Math.round(Number(b && b.tz))));
+    touch(user);
+    q.putPrefs.run(user.id, b && b.remind ? 1 : 0, b && b.weekly ? 1 : 0, Number.isFinite(hour) ? hour : 20, Number.isFinite(tz) ? tz : 180);
     return json(res, 200, { ok: true });
   }
 
   if (p === '/api/account' && m === 'DELETE') {
-    tx(() => { q.delImages.run(user.id); q.delState.run(user.id); q.delUser.run(user.id); });
+    leaveFamily(user.id);
+    tx(() => { q.delImages.run(user.id); q.delState.run(user.id); q.delPrefs.run(user.id); q.delRefs.run(user.id, user.id); q.delRefCode.run(user.id); q.delUser.run(user.id); });
     seen.delete(user.id);
     return json(res, 200, { ok: true });
   }
@@ -348,6 +527,65 @@ async function startBot() {
     }
   }
 }
+
+
+/* ---------- Напоминания ---------- */
+function localParts(tzMin, shiftDays) {
+  const d = new Date(Date.now() + tzMin * 60000 - (shiftDays || 0) * 86400000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return { day: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, hour: d.getUTCHours(), dow: d.getUTCDay() };
+}
+const rub = (n) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₽';
+function openButton() {
+  return APP_URL ? { inline_keyboard: [[{ text: 'Открыть Копилку', web_app: { url: APP_URL } }]] } : undefined;
+}
+function weeklyText(st, tz) {
+  const days = new Set();
+  for (let i = 1; i <= 7; i++) days.add(localParts(tz, i - 1).day);
+  const cats = new Map(st.cats.map((c) => [c.id, c]));
+  let spent = 0, earned = 0;
+  const byCat = new Map();
+  for (const o of st.ops) {
+    if (!days.has(o.date)) continue;
+    if (o.type === 'expense') { spent += o.amount; byCat.set(o.catId, (byCat.get(o.catId) || 0) + o.amount); }
+    else earned += o.amount;
+  }
+  let saved = 0;
+  for (const g of st.goals) for (const c of g.contribs || []) if (days.has(c.date)) saved += c.amount;
+  if (!spent && !earned && !saved) return 'Итоги недели: операций не было. Загляните и запишите траты, чтобы видеть картину 👇';
+  const top = [...byCat.entries()].sort((a, b) => b[1] - a[1])[0];
+  const c = top && cats.get(top[0]);
+  let t = `Итоги недели 📊\nПотрачено: ${rub(spent)}`;
+  if (c) t += `\nБольше всего: ${c.emoji} ${c.name} — ${rub(top[1])}`;
+  if (earned) t += `\nДоход: ${rub(earned)}`;
+  if (saved) t += `\nОтложено в цели: ${rub(saved)}`;
+  return t;
+}
+async function sendReminders() {
+  if (!BOT_NAME || !BOT_TOKEN) return;
+  for (const r of q.remindList.all()) {
+    try {
+      const lp = localParts(r.tz);
+      if (lp.hour < r.hour || lp.hour > r.hour + 3) continue;
+      const st = loadState(r.user_id).state;
+      if (!st) continue;
+      if (r.remind && r.last_sent !== lp.day) {
+        q.markSent.run(lp.day, r.user_id);
+        const wrote = st.ops.some((o) => o.type === 'expense' && o.date === lp.day);
+        if (!wrote) {
+          const resp = await tgApi('sendMessage', { chat_id: r.user_id, text: 'Вы ещё не записали траты за сегодня. Это займёт пару секунд 👇', reply_markup: openButton() }, 10000);
+          if (!resp.ok) q.markSent.run('', r.user_id);
+        }
+      }
+      if (r.weekly && lp.dow === 1 && r.last_week !== lp.day) {
+        q.markWeek.run(lp.day, r.user_id);
+        const resp = await tgApi('sendMessage', { chat_id: r.user_id, text: weeklyText(st, r.tz), reply_markup: openButton() }, 10000);
+        if (!resp.ok) q.markWeek.run('', r.user_id);
+      }
+    } catch (_) { q.markSent.run('', r.user_id); q.markWeek.run('', r.user_id); }
+  }
+}
+setInterval(() => { sendReminders().catch(() => {}); }, 10 * 60 * 1000).unref();
 
 /* ---------- Запуск ---------- */
 server.listen(PORT, () => {
