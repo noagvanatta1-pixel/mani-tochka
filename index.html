@@ -251,7 +251,7 @@ body{font-weight:500}
 .safe{display:flex;align-items:center;gap:.75rem;padding:.8rem 1rem;margin:0 0 .75rem;border-radius:1.1rem;background:rgba(15,157,115,.12);color:var(--green)}
 .safe b{display:block;font-size:1rem;font-weight:800}
 .safe div span{display:block;font-size:.8rem;font-weight:600;opacity:.85;margin-top:.15rem}
-.safe.bad{background:var(--dangerbg);color:var(--red)}
+.safe.bad{background:var(--dangerbg);color:var(--red);box-shadow:inset 0 0 0 1.5px var(--red)}
 .safe.warn{background:rgba(245,158,11,.15);color:#d97706}
 .safe .x{margin-left:auto;flex:none;width:1.9rem;height:1.9rem;border-radius:50%;border:0;background:rgba(127,127,127,.16);color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .safe .wl{display:block;margin-top:.3rem;font-size:.8rem;font-weight:700}
@@ -741,9 +741,9 @@ function alertCard(k){
   if (bad && disGet() === sig) return '';
   var x = bad ? '<button class="x" data-act="dismissal" data-sig="' + sig + '" aria-label="Скрыть до завтра">×</button>' : '';
   var lim = over.length ? '<span class="wl">Лимит превышен: ' + over.join(', ') + '</span>' : '';
-  if (!f) return over.length ? '<div class="safe warn"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Лимит превышен</b><span>' + over.join(', ') + '</span></div>' + x + '</div>' : '';
+  if (!f) return over.length ? '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Лимит превышен</b><span>' + over.join(', ') + '</span></div>' + x + '</div>' : '';
   if (empty) return '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Бюджет месяца исчерпан</b><span>Остаток с учётом платежей: ' + fmt(f.left) + '</span>' + lim + '</div>' + x + '</div>';
-  return '<div class="safe' + ((neg || over.length) ? ' warn' : '') + '"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>' + (neg ? 'Дневная норма превышена' : 'Безопасно потратить сегодня: ' + fmt(f.rest)) + '</b><span>' + (neg ? 'На ' + fmt(-f.rest) + ' · норма ' : 'По ') + fmt(f.allowance) + ' в день до конца месяца' + (f.bills > 0 ? ' · учтены платежи ' + fmt(f.bills) : '') + '</span>' + lim + '</div>' + x + '</div>';
+  return '<div class="safe' + ((neg || over.length) ? ' bad' : '') + '"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>' + (neg ? 'Сегодня сверх нормы: ' + fmt(-f.rest) : 'Безопасно потратить сегодня: ' + fmt(f.rest)) + '</b><span>По ' + fmt(f.allowance) + ' в день до конца месяца' + (f.bills > 0 ? ' · учтены платежи ' + fmt(f.bills) : '') + '</span>' + lim + '</div>' + x + '</div>';
 }
 function summaryBanner(){
   var n = new Date(); if (n.getDate() > 3 || !isCur()) return '';
