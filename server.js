@@ -698,8 +698,50 @@ async function handleQuick(m, text) {
   await tgApi('sendMessage', { chat_id: m.chat.id, text: `${rubFmt(pq.amount)}${pq.note ? ' — ' + pq.note : ''}\nВ какую категорию записать?`, reply_markup: { inline_keyboard: rows } });
   return true;
 }
+/* Подписка в чате: цены и кнопки оформления; счёт открывается прямо в Telegram */
+const STAR_PLANS_ON = () => !!(BOT_TOKEN && BOT_NAME);
+function plansMessage(uid) {
+  const info = planInfo(uid), card = !!YK_TOKEN;
+  const lines = [
+    '⭐ Подписка Копилки',
+    '',
+    'Несколько целей, семейный бюджет, регулярные платежи, экспорт и напоминания.',
+    '',
+    `• Месяц — ${info.priceMonth} ₽` + (STAR_PLANS_ON() ? ` (или ⭐ ${info.starsMonth})` : ''),
+    `• Год — ${info.priceYear} ₽` + (STAR_PLANS_ON() ? ` (или ⭐ ${info.starsYear})` : '') + ' — выгоднее',
+    '',
+    `Первые ${TRIAL_DAYS} дней бесплатно. Подписка включается сразу после оплаты.`,
+  ];
+  const kb = [];
+  if (card) kb.push([{ text: `Месяц — ${info.priceMonth} ₽`, callback_data: 'b|month|card' }, { text: `Год — ${info.priceYear} ₽`, callback_data: 'b|year|card' }]);
+  kb.push([{ text: `⭐ Месяц — ${info.starsMonth}`, callback_data: 'b|month|stars' }, { text: `⭐ Год — ${info.starsYear}`, callback_data: 'b|year|stars' }]);
+  if (APP_URL) kb.push([{ text: 'Открыть Копилку', web_app: { url: APP_URL } }]);
+  return { text: lines.join('\n'), reply_markup: { inline_keyboard: kb } };
+}
+async function sendPlanInvoice(chatId, uid, plan, method) {
+  const info = planInfo(uid), card = method === 'card' && !!YK_TOKEN;
+  const body = {
+    chat_id: chatId,
+    title: plan === 'year' ? 'Копилка на год' : 'Копилка на месяц',
+    description: plan === 'year' ? 'Подписка на 12 месяцев: несколько целей, семья, регулярные платежи, экспорт и напоминания' : 'Подписка на 30 дней: несколько целей, семья, регулярные платежи, экспорт и напоминания',
+    payload: plan + '|' + uid,
+  };
+  if (card) Object.assign(body, { provider_token: YK_TOKEN, currency: 'RUB', prices: [{ label: plan === 'year' ? 'Год' : 'Месяц', amount: (plan === 'year' ? info.priceYear : info.priceMonth) * 100 }] });
+  else Object.assign(body, { currency: 'XTR', prices: [{ label: plan === 'year' ? 'Год' : 'Месяц', amount: plan === 'year' ? info.starsYear : info.starsMonth }] });
+  return tgApi('sendInvoice', body, 10000);
+}
 async function handleCallback(cb) {
   const parts = String(cb.data || '').split('|');
+  if (parts[0] === 'pl' && cb.message) {
+    await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
+    await tgApi('sendMessage', { chat_id: cb.message.chat.id, ...plansMessage(cb.from.id) });
+    return;
+  }
+  if (parts[0] === 'b' && cb.message && (parts[1] === 'month' || parts[1] === 'year')) {
+    await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
+    await sendPlanInvoice(cb.message.chat.id, cb.from.id, parts[1], parts[2]).catch(() => {});
+    return;
+  }
   if (parts[0] === 'u' && cb.message) {
     const done = removeQuickOp(cb.from.id, parts[1]);
     await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: done ? 'Отменено' : 'Уже отменено или удалено' });
@@ -760,15 +802,14 @@ async function handleUpdate(u) {
     const sup = SUPPORT_TG ? `\n\nПоддержка: @${SUPPORT_TG}` : '';
     return tgApi('sendMessage', { chat_id: m.chat.id, text: 'Быстрая запись трат: отправьте «кофе 250» или «такси 300». Доход: «+5000 зарплата».' + sup, reply_markup: openButton() });
   }
+  if (/^\/(plans|buy|subscribe)\b/.test(text)) return tgApi('sendMessage', { chat_id: m.chat.id, ...plansMessage(m.from.id) });
   if (!text.startsWith('/') && await handleQuick(m, text)) return;
   const msg = text.startsWith('/start')
     ? `Привет${name ? ', ' + name : ''}! 👋\n\nЭто Копилка: считайте расходы, планируйте бюджет и копите на цели.\nНажмите кнопку ниже, чтобы открыть.\n\nМожно и быстрее: просто напишите сюда «кофе 250», и трата запишется сама.`
     : 'Нажмите кнопку ниже, чтобы открыть Копилку 👇\nИли напишите трату, например «кофе 250».';
-  await tgApi('sendMessage', {
-    chat_id: m.chat.id,
-    text: msg,
-    reply_markup: { inline_keyboard: [[{ text: 'Открыть Копилку', web_app: { url: APP_URL } }]] },
-  });
+  const kb = [[{ text: 'Открыть Копилку', web_app: { url: APP_URL } }]];
+  if (PAYWALL && text.startsWith('/start')) kb.push([{ text: 'Подписка и цены', callback_data: 'pl' }]);
+  await tgApi('sendMessage', { chat_id: m.chat.id, text: msg, reply_markup: { inline_keyboard: kb } });
 }
 
 async function startBot() {
@@ -783,7 +824,7 @@ async function startBot() {
       if (!APP_URL) { console.warn('Бот: не задан APP_URL — кнопка открытия приложения не настроена.'); return; }
       await tgApi('deleteWebhook');
       await tgApi('setChatMenuButton', { menu_button: { type: 'web_app', text: 'Открыть', web_app: { url: APP_URL } } });
-      await tgApi('setMyCommands', { commands: [{ command: 'start', description: 'Открыть Копилку' }, { command: 'help', description: 'Как быстро записать трату' }] });
+      await tgApi('setMyCommands', { commands: [{ command: 'start', description: 'Открыть Копилку' }, { command: 'plans', description: 'Подписка и цены' }, { command: 'help', description: 'Как быстро записать трату' }] });
       break;
     } catch (e) {
       console.error('Бот: не удалось подключиться к Telegram (' + e.message + '), повтор через ' + Math.round(delay / 1000) + ' с');
