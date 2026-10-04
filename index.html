@@ -1048,6 +1048,7 @@ function vProf(){
   return '<div class="top"><div><div class="title">Профиль</div></div></div>' +
     '<div class="card prof"><div class="ava">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span class="pchip '+(st === 'premium' ? 'gold' : '')+'">'+(st === 'premium' ? '★ ' : '')+chip+'</span></div></div>' +
     '<div class="plan slim setlink" data-act="opensettings">'+ic('gear',20)+'<b>Настройки</b><span>›</span></div>' +
+    (PLAN && PLAN.owner ? '<div class="plan slim setlink" data-act="stats">'+ic('chart',20)+'<b>Статистика</b><span>›</span></div>' : '') +
     planCard() + recurCard() + familyCard() + refCard() + accountCard() + supportCard() +
     '<div class="ver">Копилка · ' + (ONLINE ? 'данные синхронизируются с сервером' : 'данные хранятся на этом устройстве') + '</div>';
 }
@@ -1446,6 +1447,7 @@ var ACT = {
     P().name = $('#s-name').value.trim(); S.defaultIncome = num($('#s-inc').value);
     markDirty('me'); save(); toast('Сохранено');
   },
+  stats: function(){ api('GET', '/api/admin/stats').then(statsSheet).catch(function(){ toast('Не удалось загрузить статистику'); }); },
   theme: function(d){ P().theme = d.v; markDirty('me'); haptic(); render(); },
   scale: function(d){ P().scale = d.v; markDirty('me'); haptic(); render(); },
   scope: function(d){ setScope(d.v); },
@@ -1644,6 +1646,25 @@ function thanksSheet(){
     '<div style="font-size:1.5rem;font-weight:800;margin-top:.7rem">Спасибо!</div>' +
     '<div class="hi" style="margin:.5rem 0 0;font-size:1rem;font-weight:600">' + line + '<br>Все функции Копилки открыты.</div></div>' +
     '<button class="btn big" data-close>Отлично</button>');
+}
+
+function statsSheet(r){
+  function kv(a, b){ return '<div style="display:flex;justify-content:space-between;padding:.4rem .25rem;border-bottom:1px solid var(--line)"><span class="hi" style="margin:0">'+a+'</span><b>'+b+'</b></div>'; }
+  function rub(n){ return Math.round(n).toLocaleString('ru-RU') + ' ₽'; }
+  var mx = 1; r.days.forEach(function(d){ mx = Math.max(mx, d.users); });
+  var bars = r.days.map(function(d){ return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:.2rem;min-width:0"><span style="font-size:.6rem;color:var(--muted)">'+(d.users||'')+'</span><div style="width:100%;max-width:1.2rem;height:'+Math.max(2, Math.round(d.users / mx * 56))+'px;border-radius:.25rem;background:var(--pink)"></div><span style="font-size:.55rem;color:var(--muted)">'+d.d.slice(3)+'</span></div>'; }).join('');
+  var inc = r.days.filter(function(d){ return d.rub > 0; }).slice(-5).map(function(d){ return kv(d.d.slice(3) + '.' + d.d.slice(0,2), rub(d.rub)); }).join('');
+  sheet('<h3>Статистика</h3>' +
+    '<label style="margin-top:0">Люди</label>' + kv('Всего (без тебя)', r.users) + kv('Новых за сутки / 7 дней / 30 дней', r.new1 + ' / ' + r.new7 + ' / ' + r.new30) +
+    kv('Заходили за сутки / 7 дней', r.active1 + ' / ' + r.active7) + kv('Записали хотя бы одну операцию', r.withOps) +
+    kv('Вернулись через 3+ дня', r.back3 == null ? '—' : r.back3 + '%') + kv('Вернулись через 7+ дней', r.back7 == null ? '—' : r.back7 + '%') +
+    '<label>Новые люди по дням</label><div style="display:flex;align-items:flex-end;gap:.15rem;height:5.5rem;padding:.25rem 0">' + bars + '</div>' +
+    '<label>Деньги</label>' + kv('На пробном периоде', r.trial) + kv('Подписка активна', r.premium) + kv('Платили хоть раз', r.payers + ' (' + r.conv + '%)') +
+    kv('Платежей: месяц / год / навсегда', r.byPlan.month + ' / ' + r.byPlan.year + ' / ' + r.byPlan.life) +
+    kv('Рублей за 7 дней', rub(r.rub7)) + kv('Рублей за 30 дней', rub(r.rub30)) + kv('Рублей всего', rub(r.rubTotal)) + (r.starsTotal ? kv('Звёзд всего', r.starsTotal + ' ★') : '') +
+    (inc ? '<label>Последние дни с оплатами</label>' + inc : '') +
+    '<div class="hi" style="margin:.7rem .25rem 0;font-size:.75rem">Суммы до комиссий и налога. Видно только тебе.</div>' +
+    '<button class="btn big" data-close>Закрыть</button>');
 }
 function maybeThanks(){
   try {

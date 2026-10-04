@@ -152,6 +152,7 @@ const TRIAL_DAYS = Number(process.env.TRIAL_DAYS) || 14;
 const PRICE_MONTH = Number(process.env.PRICE_MONTH) || 99;
 const PRICE_YEAR = Number(process.env.PRICE_YEAR) || 790;
 const PRICE_LIFE = Number(process.env.PRICE_LIFE) || 1990;     // разовая оплата, подписка навсегда
+const OWNER_ID = Number(process.env.OWNER_ID) || 8675855634;      // только он видит статистику
 const LIFETIME_UNTIL = 4102444800000;                           // 01.01.2100
 const PAY_URL = process.env.PAY_URL || '';                       // ссылка на оплату; {uid} заменится на id пользователя
 const SUPPORT_TG = String(process.env.SUPPORT_TG || '').replace(/^@/, '').replace(/[^\w]/g, '');
@@ -359,7 +360,47 @@ function planInfo(uid) {
     priceMonth: Math.round(PRICE_MONTH * k), priceYear: Math.round(PRICE_YEAR * k), priceLife: Math.round(PRICE_LIFE * k),
     fullMonth: PRICE_MONTH, fullYear: PRICE_YEAR, fullLife: PRICE_LIFE, discount: disc,
     pay: PAY_URL ? PAY_URL.replace('{uid}', String(uid)) : '', support: SUPPORT_TG,
+    owner: uid === OWNER_ID,
     card: !!(BOT_TOKEN && BOT_NAME && YK_TOKEN), sbp: YK_ON, stars: !!(BOT_TOKEN && BOT_NAME), starsMonth: Math.round(STARS_MONTH * k), starsYear: Math.round(STARS_YEAR * k), starsLife: Math.round(STARS_LIFE * k),
+  };
+}
+
+/* статистика для владельца: без личных данных, только числа */
+function ownerStats() {
+  const now = Date.now(), DAY = 86400000, MSK = 3 * 3600000;
+  const dayKey = (t) => new Date(t + MSK).toISOString().slice(5, 10);
+  const users = db.prepare('SELECT id, created_at, last_seen FROM users WHERE id != ?').all(OWNER_ID);
+  const cnt = (f) => users.filter(f).length;
+  const prem = new Map(db.prepare('SELECT user_id, until FROM premium WHERE user_id != ?').all(OWNER_ID).map((r) => [r.user_id, r.until]));
+  const pays = db.prepare('SELECT charge_id, user_id, plan, stars AS amt, created_at FROM payments WHERE user_id != ?').all(OWNER_ID).map((p) => {
+    const yk = String(p.charge_id).startsWith('yk:');
+    const stars = !yk && p.amt < 5000;
+    return { uid: p.user_id, plan: p.plan, t: p.created_at, stars, rub: stars ? 0 : (yk ? p.amt : p.amt / 100), st: stars ? p.amt : 0 };
+  });
+  let withOps = 0;
+  for (const r of db.prepare('SELECT user_id, data FROM states WHERE user_id != ?').all(OWNER_ID)) {
+    try { const d = JSON.parse(r.data); if (d && Array.isArray(d.ops) && d.ops.length) withOps++; } catch (e) { /* ignore */ }
+  }
+  const old3 = users.filter((u) => now - u.created_at >= 3 * DAY), old7 = users.filter((u) => now - u.created_at >= 7 * DAY);
+  const back = (list, d) => list.filter((u) => u.last_seen - u.created_at >= d * DAY).length;
+  const payers = new Set(pays.map((p) => p.uid));
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const t0 = now - i * DAY, k = dayKey(t0);
+    days.push({ d: k, users: users.filter((u) => dayKey(u.created_at) === k).length, rub: Math.round(pays.filter((p) => dayKey(p.t) === k).reduce((a, p) => a + p.rub, 0)) });
+  }
+  const sumRub = (since) => Math.round(pays.filter((p) => p.t >= since).reduce((a, p) => a + p.rub, 0));
+  return {
+    users: users.length, new1: cnt((u) => now - u.created_at < DAY), new7: cnt((u) => now - u.created_at < 7 * DAY), new30: cnt((u) => now - u.created_at < 30 * DAY),
+    active1: cnt((u) => now - u.last_seen < DAY), active7: cnt((u) => now - u.last_seen < 7 * DAY),
+    withOps, back3: old3.length ? Math.round(100 * back(old3, 2) / old3.length) : null, back7: old7.length ? Math.round(100 * back(old7, 6) / old7.length) : null,
+    trial: users.filter((u) => now - u.created_at < TRIAL_DAYS * DAY && !(prem.get(u.id) > now)).length,
+    premium: [...prem.values()].filter((v) => v > now).length, payers: payers.size,
+    conv: users.length ? Math.round(1000 * payers.size / users.length) / 10 : 0,
+    payCount: pays.length, rubTotal: sumRub(0), rub7: sumRub(now - 7 * DAY), rub30: sumRub(now - 30 * DAY),
+    starsTotal: pays.reduce((a, p) => a + p.st, 0),
+    byPlan: { month: pays.filter((p) => p.plan === 'month').length, year: pays.filter((p) => p.plan === 'year').length, life: pays.filter((p) => p.plan === 'life').length },
+    days,
   };
 }
 function grantPremium(uid, days) {
@@ -494,6 +535,7 @@ async function handleApi(req, res, url) {
     return json(res, 200, { rates: c.rates, date: c.date });
   }
 
+  if (p === '/api/admin/stats' && m === 'GET') { if (user.id !== OWNER_ID) throw httpError(403, 'forbidden'); return json(res, 200, ownerStats()); }
   if (p === '/api/plan' && m === 'GET') { touch(user); return json(res, 200, planInfo(user.id)); }
 
   if (p === '/api/state' && m === 'GET') {
