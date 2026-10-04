@@ -319,7 +319,10 @@ input.f,.panel input{border-radius:.875rem;border-width:1.5px;border-color:var(-
 .cat .amt{font-family:var(--fd);font-size:1rem;font-weight:500;margin:0}
 .cat .bar,.gmini .bar{margin:0}
 .cat .em{width:auto}
-.gmini{padding:.875rem}
+.gmini{padding:.875rem;box-shadow:inset 0 0 0 1.5px var(--btn)}
+@supports (background:color-mix(in srgb,red,blue)){.gmini{background:linear-gradient(135deg,color-mix(in srgb,var(--btn) 26%,var(--card)),var(--card) 75%);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--btn) 75%,transparent),0 6px 18px color-mix(in srgb,var(--btn) 22%,transparent)}}
+.gmini .ci{background:rgba(255,200,61,.22);color:#f5a300}
+.gmini .pill{font-weight:800}
 .gmini .h{display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem}
 .gmini .gname{font-size:1.125rem;font-weight:700}
 .gmini .sub b{color:var(--ink);font-weight:600}
@@ -342,7 +345,7 @@ input.f,.panel input{border-radius:.875rem;border-width:1.5px;border-color:var(-
 .hgrid .cat .sub{margin:0 0 .375rem;font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0;background:none;display:block;font-weight:600}
 .hgrid .cat .sub.left,.hgrid .cat .sub.neg{padding:0;background:none;font-size:.75rem;margin:0 0 .375rem}
 .hgrid .cat .bar{margin-top:auto}
-.hgrid .cat .ch .ci{color:hsl(var(--ch) 75% 70%);background:hsl(var(--ch) 65% 55%/.18);border-radius:.625rem}
+.hgrid .cat .ch .ci{color:hsl(var(--ch) 75% 70%);background:hsl(var(--ch) 75% 55%/.28);border-radius:.625rem}
 html:not([data-theme=pink]):not([data-theme=mint]):not([data-theme=lav]):not([data-theme=sky]) .hgrid .cat .ch .ci{color:hsl(var(--ch) 80% 72%)}
 html[data-theme=pink] .hgrid .cat .ch .ci,html[data-theme=mint] .hgrid .cat .ch .ci,html[data-theme=lav] .hgrid .cat .ch .ci,html[data-theme=sky] .hgrid .cat .ch .ci{color:hsl(var(--ch) 65% 38%)}
 .trialbar{margin:-.5rem 0 .75rem;padding:.625rem .875rem;border-radius:.875rem;background:var(--pink-l);color:var(--pink-d);font-weight:600;font-size:.875rem;cursor:pointer}
@@ -838,7 +841,7 @@ function catCard(c, k){
   var left = c.limit - sp, over = sp > c.limit;
   var w = c.limit > 0 ? Math.min(100, sp / c.limit * 100) : (sp > 0 ? 100 : 0);
   var sub = c.limit > 0 ? (over ? 'перерасход '+fmt(-left) : 'осталось '+fmt(left)) : (sp > 0 ? 'без лимита' : 'нет лимита');
-  var hue = (S.cats.indexOf(c) * 47 + 255) % 360;
+  var hue = (S.cats.indexOf(c) * 47 + 20) % 360;
   return '<div class="card cat" style="--ch:'+hue+'" data-act="catadd" data-id="'+c.id+'"><div class="ch"><div class="em">'+ci(c.emoji)+'</div><div class="nm">'+esc(c.name)+'</div></div>' +
     '<div class="amt">'+fmt(sp)+'</div><div class="sub '+(c.limit > 0 ? (over ? 'neg' : 'left') : '')+'">'+sub+'</div>' +
     (c.limit > 0 ? '<div class="bar '+(over ? 'over' : '')+'"><i style="width:'+w+'%"></i></div>' : '') + '</div>';
