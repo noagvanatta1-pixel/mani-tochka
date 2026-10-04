@@ -1033,11 +1033,12 @@ var ACT = {
   gidea: function(d){ $('#g-name').value = d.v; },
   gmonths: function(d){ $('#g-months').value = d.v; updGoal(); },
   pay: function(d){
-    if (PLAN && PLAN.stars) { payStars(d.v); return; }
+    if (PLAN && payMethod()) { payInvoice(d.v, payMethod()); return; }
     if (PLAN && PLAN.pay) { openLink(PLAN.pay + (PLAN.pay.indexOf('?') > -1 ? '&' : '?') + 'plan=' + d.v); return; }
     if (PLAN && PLAN.support) { openTg('https://t.me/' + PLAN.support + '?text=' + encodeURIComponent('Хочу оформить подписку Копилка (' + (d.v === 'year' ? 'год' : 'месяц') + '). Мой id: ' + (tgUser ? tgUser.id : ''))); return; }
     toast('Оплата скоро появится');
   },
+  paym: function(d){ PAYM = d.v; render(); if ($('#sheet').classList.contains('on') && /Нужна подписка/.test($('#sheet').textContent)) openPaywall(PW_WHAT); },
   support: function(){ if (PLAN && PLAN.support) openTg('https://t.me/' + PLAN.support); },
   legal: function(d){ openLink(location.origin + '/' + d.v); },
   sharecard: function(){ openShare(); },
@@ -1260,8 +1261,22 @@ function gate(what){ if (!locked()) return false; openPaywall(what); return true
 function openLink(u){ try { if (tg && tg.openLink) { tg.openLink(u); return; } } catch(e){} window.open(u, '_blank'); }
 function openTg(u){ try { if (tg && tg.openTelegramLink) { tg.openTelegramLink(u); return; } } catch(e){} window.open(u, '_blank'); }
 function dmy(ts){ var d = new Date(ts); return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear(); }
+var PAYM = '';
+function payMethod(){ if (!PLAN) return ''; if (PAYM === 'card' && PLAN.card) return 'card'; if (PAYM === 'stars' && PLAN.stars) return 'stars'; return PLAN.card ? 'card' : (PLAN.stars ? 'stars' : ''); }
 function priceBtns(){
   if (!PLAN) return '';
+  var pm = payMethod();
+  if (pm) {
+    var disc = PLAN.discount > 0 ? '<div class="hi" style="margin:0 .25rem .6rem;font-weight:600">Ваша скидка за друзей: <b style="color:var(--ink)">' + PLAN.discount + '%</b></div>' : '';
+    var seg = (PLAN.card && PLAN.stars) ? '<div class="seg" style="margin-bottom:.75rem"><button class="' + (pm === 'card' ? 'on' : '') + '" data-act="paym" data-v="card">Картой · СБП</button><button class="' + (pm === 'stars' ? 'on' : '') + '" data-act="paym" data-v="stars">⭐ Звёзды</button></div>' : '';
+    var lm, ly, sv, note;
+    if (pm === 'card') { lm = fmt(PLAN.priceMonth); ly = fmt(PLAN.priceYear); sv = Math.round((1 - PLAN.priceYear / (PLAN.priceMonth * 12)) * 100); note = 'Оплата картой или через СБП, безопасно через ЮKassa прямо в Telegram.'; }
+    else { lm = '⭐ ' + PLAN.starsMonth; ly = '⭐ ' + PLAN.starsYear; sv = Math.round((1 - PLAN.starsYear / (PLAN.starsMonth * 12)) * 100); note = 'Оплата звёздами Telegram. Звёзды покупаются прямо в Telegram.'; }
+    return disc + seg +
+      '<button class="btn" data-act="pay" data-v="year" style="margin-bottom:.5rem">Год — ' + ly + (sv > 0 ? ' · выгоднее на ' + sv + '%' : '') + '</button>' +
+      '<button class="btn ghost" data-act="pay" data-v="month">Месяц — ' + lm + '</button>' +
+      '<div class="hi" style="margin:.6rem .25rem 0;font-size:.8rem;font-weight:600">' + note + '</div>';
+  }
   if (PLAN.stars) {
     var sm = PLAN.starsMonth, sy = PLAN.starsYear, sv = Math.round((1 - sy / (sm * 12)) * 100);
     return (PLAN.discount > 0 ? '<div class="hi" style="margin:0 .25rem .6rem;font-weight:600">Ваша скидка за друзей: <b style="color:var(--ink)">' + PLAN.discount + '%</b></div>' : '') +
@@ -1283,8 +1298,8 @@ function refreshPlan(tries){
     else toast('Оплата принята, подписка включится через минуту');
   }).catch(function(){});
 }
-function payStars(plan){
-  api('POST', '/api/pay/stars', {plan: plan}).then(function(r){
+function payInvoice(plan, method){
+  api('POST', method === 'card' ? '/api/pay/card' : '/api/pay/stars', {plan: plan}).then(function(r){
     if (tg && tg.openInvoice) {
       tg.openInvoice(r.link, function(st){
         if (st === 'paid') { toast('Оплата прошла, включаем подписку…'); setTimeout(function(){ refreshPlan(6); }, 1200); }
@@ -1308,7 +1323,9 @@ function supportCard(){
     (sup ? '<button class="btn ghost" data-act="support">Написать в поддержку</button>' : '') +
     '<div class="tog" style="margin-top:.4rem"><a data-act="legal" data-v="privacy" style="color:var(--pink-d);font-weight:700">Политика конфиденциальности</a><a data-act="legal" data-v="terms" style="color:var(--pink-d);font-weight:700">Условия подписки</a></div></div>';
 }
+var PW_WHAT = '';
 function openPaywall(what){
+  PW_WHAT = what;
   sheet('<h3>Нужна подписка</h3><div class="hi" style="margin:.2rem .25rem .9rem;font-weight:600">' + esc(what || 'Эта функция') + ' доступна по подписке. Учёт расходов и одна цель остаются бесплатными.</div>' + priceBtns() + '<div class="hi" style="margin:.8rem .25rem 0;font-size:.8rem;font-weight:600">Без автопродления: когда срок закончится, решаете вы.</div>');
 }
 function trialBar(){

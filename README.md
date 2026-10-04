@@ -21,6 +21,7 @@ curl -fsSL https://raw.githubusercontent.com/noagvanatta1-pixel/mani-tochka/main
 | `PRICE_MONTH`, `PRICE_YEAR` | цены, по умолчанию 99 и 790 ₽ |
 | `PAY_URL` | ссылка на оплату, `{uid}` заменяется на id пользователя; если пусто — кнопка оплаты открывает чат с поддержкой |
 | `STARS_MONTH`, `STARS_YEAR` | цена подписки в звёздах Telegram, по умолчанию 75 и 600 |
+| `YK_TOKEN` | платёжный токен ЮKassa из @BotFather (Payments → ЮKassa). Если задан, в оплате появляется выбор «Картой · СБП» / «Звёзды» |
 | `PAY_SECRET` | секрет для уведомлений об оплате (создаётся при установке) |
 | `FAMILY_PAID=1` | создавать семью может только подписчик (на сервере) |
 | `TG_API_BASE` | адрес прокси для Telegram API, если сервер его не видит |

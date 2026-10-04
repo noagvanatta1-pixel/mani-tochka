@@ -140,6 +140,8 @@ const PAY_URL = process.env.PAY_URL || '';                       // ссылка
 const SUPPORT_TG = String(process.env.SUPPORT_TG || '').replace(/^@/, '').replace(/[^\w]/g, '');
 const STARS_MONTH = Number(process.env.STARS_MONTH) || 75;       // цена в звёздах Telegram
 const STARS_YEAR = Number(process.env.STARS_YEAR) || 600;
+/* Оплата картой/СБП через ЮKassa в Telegram: платёжный токен из @BotFather (Payments → ЮKassa) */
+const YK_TOKEN = process.env.YK_TOKEN || '';
 const PAY_SECRET = process.env.PAY_SECRET || '';                 // секрет для уведомлений об оплате
 const FAMILY_PAID = process.env.FAMILY_PAID === '1';   // 1 = семью создаёт только подписчик
 
@@ -314,7 +316,7 @@ function planInfo(uid) {
     priceMonth: Math.round(PRICE_MONTH * k), priceYear: Math.round(PRICE_YEAR * k),
     fullMonth: PRICE_MONTH, fullYear: PRICE_YEAR, discount: disc,
     pay: PAY_URL ? PAY_URL.replace('{uid}', String(uid)) : '', support: SUPPORT_TG,
-    stars: !!(BOT_TOKEN && BOT_NAME), starsMonth: Math.round(STARS_MONTH * k), starsYear: Math.round(STARS_YEAR * k),
+    card: !!(BOT_TOKEN && BOT_NAME && YK_TOKEN), stars: !!(BOT_TOKEN && BOT_NAME), starsMonth: Math.round(STARS_MONTH * k), starsYear: Math.round(STARS_YEAR * k),
   };
 }
 function grantPremium(uid, days) {
@@ -403,6 +405,27 @@ async function handleApi(req, res, url) {
     }, 10000).catch(() => null);
     if (!r || !r.ok || typeof r.result !== 'string') throw httpError(502, 'telegram error');
     return json(res, 200, { link: r.result, stars });
+  }
+
+  if (p === '/api/pay/card' && m === 'POST') {
+    const body = await readJson(req, 1024);
+    const plan = body && body.plan === 'year' ? 'year' : body && body.plan === 'month' ? 'month' : '';
+    if (!plan) throw httpError(400, 'bad plan');
+    if (!BOT_TOKEN || !BOT_NAME || !YK_TOKEN) throw httpError(503, 'card payments unavailable');
+    touch(user);
+    const info = planInfo(user.id);
+    const rub = plan === 'year' ? info.priceYear : info.priceMonth;
+    const title = plan === 'year' ? 'Копилка на год' : 'Копилка на месяц';
+    const r = await tgApi('createInvoiceLink', {
+      title,
+      description: plan === 'year' ? 'Подписка на 12 месяцев: несколько целей, семья, регулярные платежи, экспорт и напоминания' : 'Подписка на 30 дней: несколько целей, семья, регулярные платежи, экспорт и напоминания',
+      payload: plan + '|' + user.id,
+      provider_token: YK_TOKEN,
+      currency: 'RUB',
+      prices: [{ label: plan === 'year' ? 'Год' : 'Месяц', amount: rub * 100 }],
+    }, 10000).catch(() => null);
+    if (!r || !r.ok || typeof r.result !== 'string') throw httpError(502, 'telegram error');
+    return json(res, 200, { link: r.result, rub });
   }
 
   if (p === '/api/plan' && m === 'GET') { touch(user); return json(res, 200, planInfo(user.id)); }
@@ -702,7 +725,11 @@ function parsePayload(str) {
 }
 async function handlePreCheckout(pq) {
   const pl = parsePayload(pq.invoice_payload);
-  const good = pl && pl.uid === pq.from.id && pq.currency === 'XTR';
+  let good = !!(pl && pl.uid === pq.from.id);
+  if (good && pq.currency === 'RUB') {
+    const info = planInfo(pl.uid);
+    good = !!YK_TOKEN && Number(pq.total_amount) === (pl.plan === 'year' ? info.priceYear : info.priceMonth) * 100;
+  } else if (good) good = pq.currency === 'XTR';
   await tgApi('answerPreCheckoutQuery', good ? { pre_checkout_query_id: pq.id, ok: true } : { pre_checkout_query_id: pq.id, ok: false, error_message: 'Не удалось подтвердить оплату, попробуйте ещё раз' });
 }
 async function handlePayment(m) {
