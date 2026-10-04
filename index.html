@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="vio">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#eef0f7">
+<meta name="theme-color" content="#120d22">
 <title>Копилка</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -161,6 +161,7 @@ input.f:focus,.panel input:focus{border-color:var(--pink)}
 .chip.on{background:var(--pink-d);color:#fff}
 .plrow{display:flex;align-items:center;gap:0.625rem;margin-top:0.625rem}
 .plrow .em{font-size:1.625rem;width:2.25rem;text-align:center}
+.backlink{display:inline-block;margin:.2rem 0 .4rem;padding:.4rem .2rem;color:var(--pink-d);font-weight:800;font-size:1rem;cursor:pointer}
 .plrow span{flex:1;font-weight:700;font-size:1.0625rem}
 .plrow .pen{font-style:normal;color:var(--muted);font-size:.9rem;margin-left:.2rem}
 .plrow input{width:8.125rem;text-align:right;padding:0.75rem 0.875rem}
@@ -457,7 +458,7 @@ function ic(n, s){ s = s || 22; var r = (s / 16) + 'rem'; return '<svg style="wi
 var KEY = 'mani_tochka_v1' + (ONLINE ? '_' + tgUser.id : '');
 function defaults(){
   return {
-    name:'', theme:'pink', scale:'m', defaultIncome:90000, income:{}, mainGoal:'g1', ops:[], debts:[], cur:'RUB',
+    name:'', theme:'vio', scale:'m', defaultIncome:90000, income:{}, mainGoal:'g1', ops:[], debts:[], cur:'RUB',
     cats:[
       {id:'c1',name:'Жилье',emoji:'🏠',limit:0},
       {id:'c2',name:'ЖКХ',emoji:'💡',limit:5000},
@@ -493,7 +494,7 @@ var THEMES = {
 };
 var SCALES = {s:{n:'Мельче',k:0.78}, m:{n:'Обычный',k:0.86}, l:{n:'Крупнее',k:1}};
 function applyTheme(){
-  var t = THEMES[P().theme] ? P().theme : 'pink';
+  var t = THEMES[P().theme] ? P().theme : 'vio';
   document.documentElement.setAttribute('data-theme', t);
   document.documentElement.style.fontSize = (16 * SCALES[SCALES[P().scale] ? P().scale : 'm'].k) + 'px';
   document.documentElement.style.setProperty('--sym', '"' + SYM() + '"');
@@ -538,7 +539,7 @@ function normalize(s){
   if (!s.income || typeof s.income !== 'object') s.income = {};
   if (typeof s.defaultIncome !== 'number') s.defaultIncome = d.defaultIncome;
   if (typeof s.name !== 'string') s.name = '';
-  if (!THEMES[s.theme]) s.theme = 'pink';
+  if (!THEMES[s.theme]) s.theme = 'vio';
   if (!SCALES[s.scale]) s.scale = 'm';
   s.goals.forEach(function(g){ if (!Array.isArray(g.contribs)) g.contribs = []; if (g.img == null) g.img = ''; });
   if (!s.goals.some(function(g){ return g.id === s.mainGoal; })) s.mainGoal = s.goals[0] ? s.goals[0].id : '';
@@ -1032,7 +1033,8 @@ function vProf(){
   var chip = st === 'premium' ? 'Премиум' : (st === 'trial' ? 'Пробный период' : 'Бесплатный тариф');
   return '<div class="top"><div><div class="title">Профиль</div></div></div>' +
     '<div class="card prof"><div class="ava">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span class="pchip '+(st === 'premium' ? 'gold' : '')+'">'+(st === 'premium' ? '★ ' : '')+chip+'</span></div></div>' +
-    planCard() + '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + Object.keys(THEMES).map(function(k){ var th = THEMES[k]; return '<button class="th '+((P().theme || 'pink') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join('') + '</div>' +
+    '<div class="plan slim setlink" data-act="opensettings">'+ic('gear',20)+'<b>Настройки</b><span>›</span></div>' +
+    planCard() + '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + Object.keys(THEMES).map(function(k){ var th = THEMES[k]; return '<button class="th '+((P().theme || 'vio') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join('') + '</div>' +
     '<label>Размер интерфейса</label><div class="seg">' + Object.keys(SCALES).map(function(k){ return '<button class="'+((P().scale || 'm') === k ? 'on' : '')+'" data-act="scale" data-v="'+k+'">'+SCALES[k].n+'</button>'; }).join('') + '</div></div>' +
     currencyCard() + familyCard() + refCard() + accountCard() + supportCard() +
     '<div class="ver">Копилка · ' + (ONLINE ? 'данные синхронизируются с сервером' : 'данные хранятся на этом устройстве') + '</div>';
@@ -1042,7 +1044,7 @@ function currencyCard(){
     '<div class="hi" style="margin:.7rem .25rem 0;font-size:.8rem;font-weight:600">Все суммы показываются в этой валюте. При смене валюты все записи пересчитаются по курсу ЦБ.</div></div>';
 }
 function vSet(){
-  return '<div class="top"><div><div class="title">Настройки</div></div></div>' +
+  return '<a class="backlink" data-act="backprof">‹ Профиль</a><div class="top"><div><div class="title">Настройки</div></div></div>' +
     '<div class="card set">' +
     '<label style="margin-top:0">Ваше имя</label><input class="f" id="s-name" value="'+esc(P().name)+'" placeholder="'+esc(tgName || 'Как к вам обращаться')+'">' +
     '<label>Доход в месяц по умолчанию, '+SYM()+'</label><input class="f" id="s-inc" inputmode="decimal" value="'+S.defaultIncome+'">' +
@@ -1055,8 +1057,8 @@ function render(){
   applyTheme();
   var views = {home:vHome, goals:vGoals, debt:vDebt, an:vAn, set:vSet, prof:vProf};
   $('#app').innerHTML = (ONLINE && (TAB === 'home' || TAB === 'goals' || TAB === 'debt' || TAB === 'an') ? scopeBar() : '') + views[TAB]();
-  var tabs = [['home','Главная','home'],['goals','Цели','target'],['debt','Долги','card'],['an','Аналитика','chart'],['set','Настройки','gear'],['prof','Профиль','user']];
-  $('#nav').innerHTML = tabs.map(function(t){ return '<button data-tab="'+t[0]+'" class="'+(t[0] === TAB ? 'on' : '')+'"><span class="i">'+ic(t[2],26)+'</span>'+t[1]+'</button>'; }).join('');
+  var tabs = [['home','Главная','home'],['goals','Цели','target'],['debt','Долги','card'],['an','Аналитика','chart'],['prof','Профиль','user']];
+  $('#nav').innerHTML = tabs.map(function(t){ return '<button data-tab="'+t[0]+'" class="'+((t[0] === TAB || (t[0] === 'prof' && TAB === 'set')) ? 'on' : '')+'"><span class="i">'+ic(t[2],26)+'</span>'+t[1]+'</button>'; }).join('');
   $('#fab').style.display = TAB === 'home' ? 'flex' : 'none';
 }
 
@@ -1270,6 +1272,8 @@ var ACT = {
   mgo: function(d){ VM.y = +d.y; VM.m = +d.m; closeSheet(); render(); },
   addop: function(){ openOp(); },
   catadd: function(d){ openOp(d.id); },
+  opensettings: function(){ TAB = 'set'; window.scrollTo(0, 0); render(); },
+  backprof: function(){ TAB = 'prof'; window.scrollTo(0, 0); render(); },
   undo: function(){ var f = undoFn; hideUndo(); if (f) f(); },
   plan: function(){ backToPlan = false; openPlan(); },
   newcat: function(){ commitPlan(); backToPlan = true; openCat(); },
