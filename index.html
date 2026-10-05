@@ -262,6 +262,7 @@ body{font-weight:500}
 .brow .bb{height:.4rem;border-radius:.4rem;background:var(--line);margin-top:.35rem;overflow:hidden}
 .brow .bb i{display:block;height:100%;border-radius:.4rem;background:var(--pink-d)}
 .btot{display:flex;justify-content:space-between;padding:.7rem .1rem 0;font-weight:800;border-top:1px solid var(--line);margin-top:.3rem}
+.edpill{padding:.3rem .7rem;border-radius:.7rem;background:var(--pink-l);color:var(--pink-d);font-size:.8rem;font-weight:800}
 .wk{margin:.75rem 0 .25rem}
 .wk .wedit{margin-top:.7rem;width:100%;font-weight:800;color:#fff;background:linear-gradient(135deg,rgba(125,140,255,.22),rgba(162,132,247,.22));border:1.5px solid var(--pink-d);border-radius:.9rem;padding:.8rem 1rem;display:flex;align-items:center;justify-content:center;gap:.5rem;box-shadow:0 0 .6rem rgba(162,132,247,.55),0 0 1.4rem rgba(125,140,255,.35),inset 0 0 .6rem rgba(162,132,247,.25);text-shadow:0 0 .5rem rgba(162,132,247,.8);animation:wglow 2.8s ease-in-out infinite}
 .wk .wedit:active{transform:scale(.98)}
@@ -1573,12 +1574,16 @@ var ACT = {
     var h = hh > 0 ? hh : shiftHours(from, to);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('Выберите дату'); return; }
     if (h <= 0 || h > 24) { toast('Введите время или часы'); return; }
-    S.work.shifts.push({id: uid(), date: date, from: hh > 0 ? '' : from, to: hh > 0 ? '' : to, h: Math.round(h * 10) / 10});
-    save(); closeSheet(); render(); toast('Смена записана: ' + fmtH(h));
+    var rec = {date: date, from: hh > 0 ? '' : from, to: hh > 0 ? '' : to, h: Math.round(h * 10) / 10};
+    var old = editShiftId ? S.work.shifts.filter(function(x){ return x.id === editShiftId; })[0] : null;
+    if (old) { old.date = rec.date; old.from = rec.from; old.to = rec.to; old.h = rec.h; } else { rec.id = uid(); S.work.shifts.push(rec); }
+    editShiftId = null;
+    save(); closeSheet(); render(); toast((old ? 'Смена изменена: ' : 'Смена записана: ') + fmtH(h));
   },
+  editshift: function(d){ openShift(d.id); },
   delshift: function(d){
     var x = S.work.shifts.filter(function(s){ return s.id === d.id; })[0]; if (!x) return;
-    confirmBox('Удалить смену ' + x.date.slice(8,10) + '.' + x.date.slice(5,7) + ' (' + fmtH(x.h) + ')?', function(){ S.work.shifts = S.work.shifts.filter(function(s){ return s.id !== d.id; }); save(); render(); });
+    confirmBox('Удалить смену ' + x.date.slice(8,10) + '.' + x.date.slice(5,7) + ' (' + fmtH(x.h) + ')?', function(){ S.work.shifts = S.work.shifts.filter(function(s){ return s.id !== d.id; }); save(); closeSheet(); render(); });
   },
   newrec: function(){ if (gate('Регулярные платежи')) return; openRecur(); },
   reccat: function(d, el){ recCat = d.id; document.querySelectorAll('[data-act="reccat"]').forEach(function(b){ b.classList.toggle('on', b === el); }); },
@@ -1647,6 +1652,7 @@ function fmtField(el){
 function fmtAllFields(root){ (root || document).querySelectorAll('input[inputmode="decimal"]').forEach(function(el){ if (el.value) fmtField(el); }); }
 document.addEventListener('input', function(e){
   fmtField(e.target);
+  if (e.target.id === 's-from' || e.target.id === 's-to') { var sh = $('#s-h'); if (sh) sh.value = ''; }
   var id = e.target.id, c = e.target.classList;
   if (e.target.closest && e.target.closest('.amtbox')) { var L = e.target.value.length; e.target.style.fontSize = L > 9 ? '1.3rem' : L > 7 ? '1.7rem' : ''; }
   if (c && (c.contains('plim') || id === 'p-inc')) updPlan();
@@ -2017,8 +2023,8 @@ function workListCard(){
   if (!S.work) return '';
   var list = S.work.shifts.slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }).slice(0, 10);
   return '<div class="card set"><label style="margin-top:0">Смены</label>' +
-    (list.length ? list.map(function(x){ return '<div class="rec" data-act="delshift" data-id="' + x.id + '"><div>' + x.date.slice(8,10) + '.' + x.date.slice(5,7) + '<br><span>' + (x.from && x.to ? x.from + ' – ' + x.to : 'без времени') + '</span></div><b>' + fmtH(x.h) + '</b></div>'; }).join('') +
-      '<div class="hi" style="margin:.4rem .25rem .6rem;font-size:.8rem;font-weight:600">Нажмите на смену, чтобы удалить</div>' : '<div class="hi" style="margin:0 .25rem .6rem;font-weight:600">Смен пока нет.</div>') +
+    (list.length ? list.map(function(x){ return '<div class="rec" data-act="editshift" data-id="' + x.id + '"><div>' + x.date.slice(8,10) + '.' + x.date.slice(5,7) + '<br><span>' + (x.from && x.to ? x.from + ' – ' + x.to : 'без времени') + '</span></div><div style="display:flex;align-items:center;gap:.6rem"><b>' + fmtH(x.h) + '</b><span class="edpill">Изменить</span></div></div>'; }).join('') +
+      '<div class="hi" style="margin:.4rem .25rem .6rem;font-size:.8rem;font-weight:600">Нажмите на смену, чтобы изменить или удалить</div>' : '<div class="hi" style="margin:0 .25rem .6rem;font-weight:600">Смен пока нет.</div>') +
     '<button class="btn ghost" data-act="newshift">' + ic('plus', 22) + ' Записать смену</button></div>';
 }
 function openWork(){
@@ -2036,12 +2042,16 @@ function openWork(){
     (S.work ? '<button class="btn ghost danger" data-act="workoff">Выключить учёт часов</button>' : '') +
     '<button class="btn big" data-act="worksave">Сохранить</button>');
 }
-function openShift(){
-  var def = S.work && S.work.shifts.length ? S.work.shifts[S.work.shifts.length - 1] : null;
-  sheet('<h3>Смена</h3><label>Дата</label><input id="s-date" type="date" value="' + today() + '">' +
+var editShiftId = null;
+function openShift(id){
+  editShiftId = id || null;
+  var ex = id ? S.work.shifts.filter(function(x){ return x.id === id; })[0] : null;
+  var def = ex || (S.work && S.work.shifts.length ? S.work.shifts[S.work.shifts.length - 1] : null);
+  sheet('<h3>' + (ex ? 'Изменить смену' : 'Смена') + '</h3><label>Дата</label><input id="s-date" type="date" value="' + (ex ? ex.date : today()) + '">' +
     '<label>Начало и конец</label><div class="row2"><input id="s-from" type="time" value="' + (def && def.from || '08:00') + '" style="flex:1"><input id="s-to" type="time" value="' + (def && def.to || '17:00') + '" style="flex:1"></div>' +
-    '<label>Или сразу часы</label><input id="s-h" inputmode="decimal" placeholder="Например, 8,5" autocomplete="off">' +
-    '<button class="btn big" data-act="saveshift">Записать</button>');
+    '<label>Или сразу часы</label><input id="s-h" inputmode="decimal" placeholder="Например, 8,5" autocomplete="off"' + (ex && !(ex.from && ex.to) ? ' value="' + String(ex.h).replace('.', ',') + '"' : '') + '>' +
+    (ex ? '<button class="btn ghost danger" data-act="delshift" data-id="' + ex.id + '">Удалить смену</button>' : '') +
+    '<button class="btn big" data-act="saveshift">' + (ex ? 'Сохранить' : 'Записать') + '</button>');
 }
 function spentSheet(){
   var k = curKey(), tot = spentOf(k), rows = S.cats.map(function(c){ return {c: c, v: sum(catOps(k, c.id).map(function(o){ return o.amount; }))}; }).filter(function(r){ return r.v > 0; }).sort(function(a, b){ return b.v - a.v; });
