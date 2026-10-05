@@ -651,7 +651,7 @@ var spentOf = function(k){ return sum(opsOf(k).filter(function(o){ return o.type
 var extraOf = function(k){ return sum(opsOf(k).filter(function(o){ return o.type === 'income'; }).map(function(o){ return o.amount; })); };
 var baseIncome = function(k){ return S.income[k] != null ? S.income[k] : S.defaultIncome; };
 var incomeOf = function(k){ return (workAuto(k) ? earnedOf(k) : baseIncome(k)) + extraOf(k); };
-function workAuto(k){ var w = S.work; return !!(w && scope === 'me' && w.mode !== 'fixed' && w.auto !== false && k >= (w.since || realKey()) && S.income[k] == null && workRate(w) > 0); }
+function workAuto(k){ var w = S.work; return !!(w && scope === 'me' && w.mode !== 'fixed' && w.auto !== false && k >= (w.since || realKey()) && workRate(w) > 0); }
 function earnedOf(k){ var w = S.work; return Math.round(hoursOf(k) * workRate(w) + (w.bonus || 0)); }
 var saved = function(g){ return sum(g.contribs.map(function(c){ return c.amount; })); };
 var contribOf = function(k){ return sum(S.goals.map(function(g){ return sum(g.contribs.filter(function(c){ return c.date.slice(0,7) === k; }).map(function(c){ return c.amount; })); })); };
