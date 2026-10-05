@@ -255,6 +255,13 @@ body{font-weight:500}
 .safe.warn{background:rgba(245,158,11,.15);color:#d97706}
 .safe .x{margin-left:auto;flex:none;width:1.9rem;height:1.9rem;border-radius:50%;border:0;background:rgba(127,127,127,.16);color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .safe .wl{display:block;margin-top:.3rem;font-size:.8rem;font-weight:700}
+.mini.tap{cursor:pointer}
+.brow{display:flex;align-items:center;gap:.7rem;padding:.6rem .1rem}
+.brow .bm{flex:1;min-width:0}
+.brow .bm b{display:flex;justify-content:space-between;gap:.5rem;font-weight:800}
+.brow .bb{height:.4rem;border-radius:.4rem;background:var(--line);margin-top:.35rem;overflow:hidden}
+.brow .bb i{display:block;height:100%;border-radius:.4rem;background:var(--pink-d)}
+.btot{display:flex;justify-content:space-between;padding:.7rem .1rem 0;font-weight:800;border-top:1px solid var(--line);margin-top:.3rem}
 .wk{margin:.75rem 0 .25rem}
 .wk .wh{display:flex;align-items:center;gap:.6rem;font-weight:800}
 .wk .wh b{flex:1;font-size:1.05rem}
@@ -884,7 +891,7 @@ function vHome(){
   var k = curKey(), h = webBar() + monthHeader(true) + trialBar();
   var g = goalById(S.mainGoal) || S.goals[0];
   h += '<div class="bal"><div class="lbl">Осталось в этом месяце</div><div class="big">'+fmt(leftOf(k))+'</div>' +
-    '<div class="row"><div class="mini"><span>Доход</span><b>'+fmt(incomeOf(k))+'</b></div><div class="mini"><span>Потрачено</span><b>'+fmt(spentOf(k))+'</b></div></div></div>';
+    '<div class="row"><div class="mini tap" data-act="inclist"><span>Доход</span><b>'+fmt(incomeOf(k))+'</b></div><div class="mini tap" data-act="spentlist"><span>Потрачено</span><b>'+fmt(spentOf(k))+'</b></div></div></div>';
   h += alertCard(k) + streakChip() + summaryBanner();
   if (g) h += goalMini(g);
   h += workCard();
@@ -1527,6 +1534,8 @@ var ACT = {
   },
   remtog: function(d){ if (!PREFS[d.k] && gate('Напоминания в боте')) return; PREFS[d.k] = !PREFS[d.k]; savePrefs(); render(); },
   remhour: function(d){ PREFS.hour = Number(d.v); savePrefs(); render(); },
+  spentlist: function(){ spentSheet(); },
+  inclist: function(){ incomeSheet(); },
   workset: function(){ openWork(); },
   workdis: function(){ try { localStorage.setItem('kp_wkdis', '1'); } catch (e) {} render(); },
   wmode: function(d, el){
@@ -2013,6 +2022,26 @@ function openShift(){
     '<label>Начало и конец</label><div class="row2"><input id="s-from" type="time" value="' + (def && def.from || '08:00') + '" style="flex:1"><input id="s-to" type="time" value="' + (def && def.to || '17:00') + '" style="flex:1"></div>' +
     '<label>Или сразу часы</label><input id="s-h" inputmode="decimal" placeholder="Например, 8,5" autocomplete="off">' +
     '<button class="btn big" data-act="saveshift">Записать</button>');
+}
+function spentSheet(){
+  var k = curKey(), tot = spentOf(k), rows = S.cats.map(function(c){ return {c: c, v: sum(catOps(k, c.id).map(function(o){ return o.amount; }))}; }).filter(function(r){ return r.v > 0; }).sort(function(a, b){ return b.v - a.v; });
+  var other = sum(opsOf(k).filter(function(o){ return o.type === 'expense' && !catById(o.catId); }).map(function(o){ return o.amount; }));
+  var h = '<h3>Потрачено · ' + MONTHS[VM.m] + '</h3>';
+  if (!rows.length && !other) return sheet(h + '<div class="empty">В этом месяце трат пока нет</div>');
+  h += rows.map(function(r){
+    var pc = tot > 0 ? Math.max(2, Math.round(r.v / tot * 100)) : 0;
+    return '<div class="brow">' + ci(r.c.emoji) + '<div class="bm"><b><span>' + esc(r.c.name) + '</span><span>' + fmt(r.v) + '</span></b><div class="bb"><i style="width:' + pc + '%"></i></div>' +
+      (r.c.limit > 0 ? '<div class="hi" style="font-size:.78rem;font-weight:600;margin-top:.25rem">' + (r.v > r.c.limit ? 'Сверх лимита на ' + fmt(r.v - r.c.limit) : 'Лимит ' + fmt(r.c.limit) + ', осталось ' + fmt(r.c.limit - r.v)) + '</div>' : '') + '</div></div>';
+  }).join('');
+  if (other > 0) h += '<div class="brow">' + ci('•') + '<div class="bm"><b><span>Без категории</span><span>' + fmt(other) + '</span></b></div></div>';
+  sheet(h + '<div class="btot"><span>Всего</span><span>' + fmt(tot) + '</span></div>');
+}
+function incomeSheet(){
+  var k = curKey(), ex = opsOf(k).filter(function(o){ return o.type === 'income'; }).sort(function(a, b){ return a.date < b.date ? 1 : -1; });
+  var h = '<h3>Доход · ' + MONTHS[VM.m] + '</h3><div class="brow"><div class="bm"><b><span>Основной доход</span><span>' + fmt(baseIncome(k)) + '</span></b></div></div>';
+  h += ex.map(function(o){ return '<div class="brow"><div class="bm"><b><span>' + esc(o.note || 'Доп. поступление') + '</span><span>+' + fmt(o.amount) + '</span></b><div class="hi" style="font-size:.78rem;font-weight:600">' + o.date.slice(8,10) + '.' + o.date.slice(5,7) + '</div></div></div>'; }).join('');
+  if (S.work && scope === 'me') { var c = workCalc(k); if (c && c.rate > 0) h += '<div class="hi" style="margin:.6rem .1rem 0;font-weight:600">По часам: отработано ' + fmtH(c.worked) + ', это ≈ ' + fmt(Math.round(c.earned)) + ' по оценке ставки. В доход эта сумма не входит: основной доход задаётся в настройках.</div>'; }
+  sheet(h + '<div class="btot"><span>Всего</span><span>' + fmt(incomeOf(k)) + '</span></div>');
 }
 function exportCard(){
   return '<div class="card set"><label style="margin-top:0">Экспорт</label><button class="btn ghost" data-act="export">Выгрузить операции (CSV для Excel)</button></div>';
