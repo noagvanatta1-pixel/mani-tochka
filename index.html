@@ -678,6 +678,7 @@ function sheet(html){
     '<div class="shead"><div class="grab"></div><div class="hrow"><h3>' + esc(title) + '</h3><button class="x" data-close aria-label="Закрыть">×</button></div></div>' +
     '<div class="sbody">' + tmp.innerHTML + '</div>' + (foot ? '<div class="sfoot">' + foot + '</div>' : '') + '</div>';
   void el.offsetHeight; el.classList.add('on'); fitSheet();
+  fmtAllFields(el);
 }
 function closeSheet(){
   var el = $('#sheet'); el.classList.remove('on');
@@ -1082,13 +1083,14 @@ function accountCard(){
     (BOT ? '<button class="btn ghost" data-act="invite">'+ic('plus',22)+' Позвать друзей</button>' : '') +
     '<button class="btn danger" style="margin-top:0.625rem" data-act="delaccount">Удалить мои данные с сервера</button></div>';
 }
+function ownCached(){ try { return localStorage.getItem('kp_own') === '1'; } catch (e) { return false; } }
 function vProf(){
   var nm = userName() || 'Профиль', st = PLAN && PLAN.status;
   var chip = st === 'premium' ? 'Премиум' : (st === 'trial' ? 'Пробный период' : 'Бесплатный тариф');
   return '<div class="top"><div><div class="title">Профиль</div></div></div>' +
     '<div class="card prof"><div class="ava">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span class="pchip '+(st === 'premium' ? 'gold' : '')+'">'+(st === 'premium' ? '★ ' : '')+chip+'</span></div></div>' +
     '<div class="plan slim setlink" data-act="opensettings">'+ic('gear',20)+'<b>Настройки</b><span>›</span></div>' +
-    (PLAN && PLAN.owner ? '<div class="plan slim setlink" data-act="stats">'+ic('chart',20)+'<b>Статистика</b><span>›</span></div>' : '') +
+    ((PLAN ? PLAN.owner : ownCached()) ? '<div class="plan slim setlink" data-act="stats">'+ic('chart',20)+'<b>Статистика</b><span>›</span></div>' : '') +
     planCard() + (scope === 'me' ? workListCard() : '') + recurCard() + familyCard() + refCard() + accountCard() + supportCard() +
     '<div class="ver">Копилка · ' + (ONLINE ? 'данные синхронизируются с сервером' : 'данные хранятся на этом устройстве') + '</div>';
 }
@@ -1117,6 +1119,7 @@ function render(){
   var tabs = [['home','Главная','home'],['goals','Цели','target'],['debt','Долги','card'],['an','Аналитика','chart'],['prof','Профиль','user']];
   $('#nav').innerHTML = tabs.map(function(t){ return '<button data-tab="'+t[0]+'" class="'+((t[0] === TAB || (t[0] === 'prof' && TAB === 'set')) ? 'on' : '')+'"><span class="i">'+ic(t[2],26)+'</span>'+t[1]+'</button>'; }).join('');
   $('#fab').style.display = TAB === 'home' ? 'flex' : 'none';
+  fmtAllFields($('#app'));
 }
 
 /* ---------- Sheets ---------- */
@@ -1600,7 +1603,24 @@ document.addEventListener('click', function(e){
   if (t.dataset.tab) { TAB = t.dataset.tab; window.scrollTo(0, 0); haptic('light'); render(); return; }
   if (ACT[t.dataset.act]) ACT[t.dataset.act](t.dataset, t);
 });
+/* суммы с пробелами между тысячами: 90 000 */
+var NOFMT = {'f-rate': 1, 's-h': 1, 'd-rate': 1};
+function fmtField(el){
+  if (!el || el.tagName !== 'INPUT' || el.getAttribute('inputmode') !== 'decimal' || NOFMT[el.id]) return;
+  var v = el.value, pos = el.selectionStart, digitsBefore = pos == null ? null : v.slice(0, pos).replace(/[^\d]/g, '').length;
+  var m = /^([\d\s]*)([.,]?)(\d*)$/.exec(v.replace(/ /g, ' ')); if (!m) return;
+  var ip = m[1].replace(/\s/g, ''); if (ip.length < 4 && !/\s/.test(m[1])) return;
+  var out = ip.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + m[2] + m[3];
+  if (out === v) return;
+  el.value = out;
+  if (digitsBefore != null && el === document.activeElement) {
+    var n = 0, i = 0; while (i < out.length && n < digitsBefore) { if (/\d/.test(out.charAt(i))) n++; i++; }
+    try { el.setSelectionRange(i, i); } catch (x) {}
+  }
+}
+function fmtAllFields(root){ (root || document).querySelectorAll('input[inputmode="decimal"]').forEach(function(el){ if (el.value) fmtField(el); }); }
 document.addEventListener('input', function(e){
+  fmtField(e.target);
   var id = e.target.id, c = e.target.classList;
   if (e.target.closest && e.target.closest('.amtbox')) { var L = e.target.value.length; e.target.style.fontSize = L > 9 ? '1.3rem' : L > 7 ? '1.7rem' : ''; }
   if (c && (c.contains('plim') || id === 'p-inc')) updPlan();
@@ -2031,7 +2051,12 @@ function loadExtras(){
   if (!ONLINE) return;
   loadFamInfo().then(function(){ if (TAB === 'prof' || TAB === 'set' || TAB === 'home') render(); }).catch(function(){});
   api('GET', '/api/prefs').then(function(r){ PREFS = {remind: !!r.remind, weekly: !!r.weekly, bills: !!r.bills, monthly: !!r.monthly, hour: r.hour || 20}; if (TAB === 'set') render(); }).catch(function(){});
-  api('GET', '/api/plan').then(function(r){ PLAN = r; if (TAB === 'prof' || TAB === 'set' || TAB === 'home') render(); maybeThanks(); }).catch(function(){});
+  (function getPlan(n){
+    api('GET', '/api/plan').then(function(r){
+      PLAN = r; try { localStorage.setItem('kp_own', r && r.owner ? '1' : ''); } catch (e) {}
+      if (TAB === 'prof' || TAB === 'set' || TAB === 'home') render(); maybeThanks();
+    }).catch(function(){ if (n < 3) setTimeout(function(){ getPlan(n + 1); }, 3000 * (n + 1)); });
+  })(0);
   api('GET', '/api/rates').then(function(r){ if (r && r.rates) { RATES = r.rates; if ($('#f-fx')) updFx(); } }).catch(function(){});
   api('GET', '/api/ref').then(function(r){ REF = r; if (TAB === 'prof') render(); }).catch(function(){});
 }
