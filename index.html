@@ -262,6 +262,7 @@ body{font-weight:500}
 .brow .bb{height:.4rem;border-radius:.4rem;background:var(--line);margin-top:.35rem;overflow:hidden}
 .brow .bb i{display:block;height:100%;border-radius:.4rem;background:var(--pink-d)}
 .btot{display:flex;justify-content:space-between;padding:.7rem .1rem 0;font-weight:800;border-top:1px solid var(--line);margin-top:.3rem}
+.psub{margin-top:.4rem;font-size:.85rem;font-weight:700;color:var(--muted)}
 .rec .edpill,.edpill{padding:.45rem .9rem;border-radius:.8rem;background:var(--btn);color:#fff;border:0;font-size:.95rem;font-weight:800;letter-spacing:0;-webkit-font-smoothing:antialiased;box-shadow:0 0 .6rem rgba(162,132,247,.5)}
 .wk{margin:.75rem 0 .25rem}
 .wk .wedit{margin-top:.7rem;width:100%;font-weight:800;color:#fff;background:linear-gradient(135deg,rgba(125,140,255,.22),rgba(162,132,247,.22));border:1.5px solid var(--pink-d);border-radius:.9rem;padding:.8rem 1rem;display:flex;align-items:center;justify-content:center;gap:.5rem;box-shadow:0 0 .6rem rgba(162,132,247,.55),0 0 1.4rem rgba(125,140,255,.35),inset 0 0 .6rem rgba(162,132,247,.25);text-shadow:0 0 .5rem rgba(162,132,247,.8);animation:wglow 2.8s ease-in-out infinite}
@@ -1105,7 +1106,7 @@ function vProf(){
   var nm = userName() || 'Профиль', st = PLAN && PLAN.status;
   var chip = st === 'premium' ? 'Премиум' : (st === 'trial' ? 'Пробный период' : 'Бесплатный тариф');
   return '<div class="top"><div><div class="title">Профиль</div></div></div>' +
-    '<div class="card prof"><div class="ava">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span class="pchip '+(st === 'premium' ? 'gold' : '')+'">'+(st === 'premium' ? '★ ' : '')+chip+'</span></div></div>' +
+    '<div class="card prof"><div class="ava">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span class="pchip '+(st === 'premium' ? 'gold' : '')+'">'+(st === 'premium' ? '★ ' : '')+chip+'</span>'+(premMerged() ? '<div class="psub">'+premText()+'</div>' : '')+'</div></div>' +
     '<div class="plan slim setlink" data-act="opensettings">'+ic('gear',20)+'<b>Настройки</b><span>›</span></div>' +
     ((PLAN ? PLAN.owner : ownCached()) ? '<div class="plan slim setlink" data-act="stats">'+ic('chart',20)+'<b>Статистика</b><span>›</span></div>' : '') +
     planCard() + (scope === 'me' ? workListCard() : '') + recurCard() + familyCard() + refCard() + accountCard() + supportCard() +
@@ -1827,8 +1828,14 @@ function payInvoice(plan, method){
   }).catch(function(){ toast('Не удалось создать счёт. Попробуйте позже'); });
 }
 document.addEventListener('visibilitychange', function(){ if (!document.hidden && PAY_WAIT && ONLINE) refreshPlan(10, true); });
+function premText(){
+  if (!ONLINE || !PLAN || PLAN.status !== 'premium') return '';
+  return PLAN.until > 4000000000000 ? 'Подписка навсегда' : 'Подписка активна до ' + dmy(PLAN.until);
+}
+function premMerged(){ return !!premText() && !(PLAN.until <= 4000000000000 && PLAN.daysLeft <= 7); }
 function planCard(){
   if (!ONLINE || !PLAN || (!PLAN.paywall && PLAN.status !== 'premium')) return '';
+  if (premMerged()) return '';
   var t, extra = '';
   if (PLAN.status === 'premium') { t = PLAN.until > 4000000000000 ? 'Подписка навсегда' : 'Подписка активна до ' + dmy(PLAN.until); if (PLAN.daysLeft <= 7) extra = priceBtns(); }
   else if (PLAN.status === 'trial') { t = 'Пробный период: осталось ' + PLAN.daysLeft + ' ' + plural(PLAN.daysLeft, ['день', 'дня', 'дней']) + '. Все функции открыты.'; extra = priceBtns(); }
