@@ -575,6 +575,7 @@ function normalize(s){
   if (!s.income || typeof s.income !== 'object') s.income = {};
   if (typeof s.defaultIncome !== 'number') s.defaultIncome = d.defaultIncome;
   if (typeof s.name !== 'string') s.name = '';
+  if (typeof s.incomeMax !== 'number' || !(s.incomeMax > 0)) delete s.incomeMax;
   if (!THEMES[s.theme]) s.theme = 'vio';
   if (!SCALES[s.scale]) s.scale = 'm';
   if (s.work && typeof s.work === 'object') {
@@ -1106,7 +1107,8 @@ function vSet(){
   return '<a class="backlink" data-act="backprof">‹ Профиль</a><div class="top"><div><div class="title">Настройки</div></div></div>' +
     '<div class="card set">' +
     '<label style="margin-top:0">Ваше имя</label><input class="f" id="s-name" value="'+esc(P().name)+'" placeholder="'+esc(tgName || 'Как к вам обращаться')+'">' +
-    '<label>Доход в месяц по умолчанию, '+SYM()+'</label><input class="f" id="s-inc" inputmode="decimal" value="'+S.defaultIncome+'">' +
+    '<label>Доход в месяц, '+SYM()+': от и до</label><div class="row2"><input class="f" id="s-inc" inputmode="decimal" value="'+S.defaultIncome+'" placeholder="от" style="flex:1"><input class="f" id="s-incmax" inputmode="decimal" value="'+(S.incomeMax > S.defaultIncome ? S.incomeMax : '')+'" placeholder="до" style="flex:1"></div>' +
+    '<div class="hi" style="margin:.4rem .25rem 0;font-size:.8rem;font-weight:600">Бюджет считается по «от», чтобы хватало и в слабый месяц. «До» — необязательно.</div>' +
     '<button class="btn big" data-act="savesettings">Сохранить</button></div>' +
     themeCard() + currencyCard() + remindCard() + exportCard() +
     '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button></div>';
@@ -1487,7 +1489,7 @@ var ACT = {
     toast(a > 0 ? 'Отложено ' + fmt(a) : 'Снято ' + fmt(-a));
   },
   savesettings: function(){
-    P().name = $('#s-name').value.trim(); S.defaultIncome = num($('#s-inc').value);
+    P().name = $('#s-name').value.trim(); S.defaultIncome = num($('#s-inc').value); var mx = num($('#s-incmax').value); if (mx > S.defaultIncome) S.incomeMax = mx; else delete S.incomeMax;
     markDirty('me'); save(); toast('Сохранено');
   },
   dismissal: function(d){ try { localStorage.setItem('kp_dis', d.sig); } catch (e) {} render(); },
