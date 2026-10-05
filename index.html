@@ -263,6 +263,7 @@ body{font-weight:500}
 .brow .bb i{display:block;height:100%;border-radius:.4rem;background:var(--pink-d)}
 .btot{display:flex;justify-content:space-between;padding:.7rem .1rem 0;font-weight:800;border-top:1px solid var(--line);margin-top:.3rem}
 .wk{margin:.75rem 0 .25rem}
+.wk .wedit{margin-top:.7rem;width:100%;font-weight:800;color:var(--pink-d);background:var(--pink-l);border-radius:.9rem;padding:.8rem 1rem;display:flex;align-items:center;justify-content:center;gap:.5rem}
 .wk .wh{display:flex;align-items:center;gap:.6rem;font-weight:800}
 .wk .wh b{flex:1;font-size:1.05rem}
 .wk .wh .gadd{flex:none}
@@ -589,6 +590,7 @@ function normalize(s){
     var w = s.work;
     w.mode = w.mode === 'rate' || w.mode === 'fixed' ? w.mode : 'range';
     ['rate','min','max','bonus'].forEach(function(k){ w[k] = typeof w[k] === 'number' && isFinite(w[k]) && w[k] > 0 ? w[k] : 0; });
+    if (typeof w.since !== 'string' || !w.since) { var dn = new Date(); w.since = dn.getFullYear() + '-' + String(dn.getMonth() + 1).padStart(2, '0'); } if (typeof w.auto !== 'boolean') delete w.auto;
     w.shifts = Array.isArray(w.shifts) ? w.shifts.filter(function(x){ return x && typeof x.date === 'string' && typeof x.h === 'number' && x.h > 0; }) : [];
   } else delete s.work;
   s.goals.forEach(function(g){ if (!Array.isArray(g.contribs)) g.contribs = []; if (g.img == null) g.img = ''; });
@@ -648,7 +650,9 @@ var sum = function(arr){ return arr.reduce(function(a,x){ return a + x; }, 0); }
 var spentOf = function(k){ return sum(opsOf(k).filter(function(o){ return o.type === 'expense'; }).map(function(o){ return o.amount; })); };
 var extraOf = function(k){ return sum(opsOf(k).filter(function(o){ return o.type === 'income'; }).map(function(o){ return o.amount; })); };
 var baseIncome = function(k){ return S.income[k] != null ? S.income[k] : S.defaultIncome; };
-var incomeOf = function(k){ return baseIncome(k) + extraOf(k); };
+var incomeOf = function(k){ return (workAuto(k) ? earnedOf(k) : baseIncome(k)) + extraOf(k); };
+function workAuto(k){ var w = S.work; return !!(w && scope === 'me' && w.mode !== 'fixed' && w.auto !== false && k >= (w.since || realKey()) && S.income[k] == null && workRate(w) > 0); }
+function earnedOf(k){ var w = S.work; return Math.round(hoursOf(k) * workRate(w) + (w.bonus || 0)); }
 var saved = function(g){ return sum(g.contribs.map(function(c){ return c.amount; })); };
 var contribOf = function(k){ return sum(S.goals.map(function(g){ return sum(g.contribs.filter(function(c){ return c.date.slice(0,7) === k; }).map(function(c){ return c.amount; })); })); };
 var leftOf = function(k){ return incomeOf(k) - spentOf(k) - contribOf(k); };
@@ -1537,6 +1541,7 @@ var ACT = {
   spentlist: function(){ spentSheet(); },
   inclist: function(){ incomeSheet(); },
   workset: function(){ openWork(); },
+  wauto: function(d, el){ workAuto0 = d.v === '1'; document.querySelectorAll('[data-act="wauto"]').forEach(function(b){ b.classList.toggle('on', b === el); }); },
   applyearn: function(){
     var k = curKey(), c = workCalc(k); if (!c || c.rate <= 0) return;
     var v = Math.round(c.earned + c.bonus);
@@ -1554,7 +1559,7 @@ var ACT = {
     if (mn > 0 && mx > 0 && mn > mx) { var t = mn; mn = mx; mx = t; }
     if (workMode !== 'fixed' && (workMode === 'rate' ? r <= 0 : (mn <= 0 && mx <= 0))) { toast(workMode === 'rate' ? 'Введите ставку' : 'Введите, сколько получаете'); return; }
     var old = S.work ? S.work.shifts : [];
-    S.work = {mode: workMode, rate: r > 0 ? r : 0, min: mn > 0 ? mn : 0, max: mx > 0 ? mx : 0, bonus: b > 0 ? b : 0, shifts: old};
+    S.work = {mode: workMode, rate: r > 0 ? r : 0, min: mn > 0 ? mn : 0, max: mx > 0 ? mx : 0, bonus: b > 0 ? b : 0, auto: workAuto0, since: (S.work && S.work.since) || realKey(), shifts: old};
     save(); closeSheet(); render(); toast('Сохранено');
   },
   workoff: function(){ confirmBox('Выключить учёт часов? Записанные смены удалятся.', function(){ delete S.work; save(); closeSheet(); render(); }); },
@@ -1955,7 +1960,7 @@ function applyRecurring(){
   if (added) save();
 }
 /* ---------- Рабочие часы ---------- */
-var WORK_NORM = 160, workMode = 'rate';
+var WORK_NORM = 160, workMode = 'rate', workAuto0 = true;
 function workDis(){ try { return localStorage.getItem('kp_wkdis') === '1'; } catch (e) { return false; } }
 function workRate(w){
   if (w.mode === 'rate') return w.rate || 0;
@@ -1993,14 +1998,15 @@ function workCard(){
   var h = '<div class="card wk"><div class="wh">' + ic('clock', 20) + '<b>Часы</b><button class="gadd" data-act="newshift" aria-label="Записать смену">' + ic('plus', 22) + '</button></div>';
   if (!c || c.rate <= 0) return h + '<div class="wnote" data-act="workset">Укажите ставку или диапазон дохода, чтобы считать часы</div></div>';
   h += '<div class="wrow"><span>Отработано в этом месяце</span><b>' + fmtH(c.worked) + '</b></div>';
-  if (c.fixed) return h + '<div class="wnote" data-act="workset">Зарплата фиксированная: доход от часов не зависит · изменить</div></div>';
-  if (c.worked > 0) h += '<div class="wrow" data-act="applyearn" style="cursor:pointer"><span>Заработано по часам' + (c.bonus ? ' с премией' : '') + '</span><b>≈ ' + fmt(Math.round(c.earned + c.bonus)) + ' ›</b></div>';
+  if (c.fixed) return h + '<button class="btn ghost wedit" data-act="workset">' + ic('gear', 18) + ' Изменить</button><div class="wnote">Зарплата фиксированная: доход от часов не зависит</div></div>';
+  if (workAuto(k)) h += '<div class="wrow"><span>Доход месяца по часам' + (c.bonus ? ' (с премией)' : '') + '</span><b>' + fmt(earnedOf(k)) + '</b></div>';
+  else if (c.worked > 0) h += '<div class="wrow" data-act="applyearn" style="cursor:pointer"><span>Заработано по часам' + (c.bonus ? ' с премией' : '') + '</span><b>≈ ' + fmt(Math.round(c.earned + c.bonus)) + ' ›</b></div>';
   if (isCur()) {
     h += '<div class="wrow"><span>На базовые расходы (' + fmt(c.basics) + ')</span><b>' + fmtH(c.needB) + (c.remB > 0 ? ' · ещё ' + fmtH(c.remB) : ' ✓') + '</b></div>';
     if (c.goalPer > 0) h += '<div class="wrow"><span>И на цель (' + fmt(c.goalPer) + ')</span><b>' + fmtH(c.needG) + (c.remG > 0 ? ' · ещё ' + fmtH(c.remG) : ' ✓') + '</b></div>';
     if (c.remG > 0 && c.dl) h += '<div class="wrow"><span>В среднем в день до конца месяца</span><b>' + fmtH(c.perDay) + '</b></div>';
   }
-  h += '<div class="wnote" data-act="workset">' + (w.mode === 'rate' ? 'Ставка ' + fmt(w.rate) + '/ч' : 'Оценка ≈ ' + fmt(Math.round(c.rate)) + '/ч (доход ' + fmt(w.min || w.max) + (w.min && w.max && w.max !== w.min ? '–' + fmt(w.max) : '') + ')') + (c.bonus ? ' · премия ' + fmt(c.bonus) : '') + ' · изменить</div></div>';
+  h += '<button class="btn ghost wedit" data-act="workset">' + ic('gear', 18) + ' Изменить ставку и доход</button><div class="wnote">' + (w.mode === 'rate' ? 'Ставка ' + fmt(w.rate) + '/ч' : 'Оценка ≈ ' + fmt(Math.round(c.rate)) + '/ч (доход ' + fmt(w.min || w.max) + (w.min && w.max && w.max !== w.min ? '–' + fmt(w.max) : '') + ')') + (c.bonus ? ' · премия ' + fmt(c.bonus) : '') + '</div></div>';
   return h;
 }
 function workListCard(){
@@ -2013,7 +2019,7 @@ function workListCard(){
 }
 function openWork(){
   var w = S.work || {mode: 'rate', rate: 0, min: 0, max: 0, bonus: 0};
-  workMode = w.mode;
+  workMode = w.mode; workAuto0 = w.auto !== false;
   sheet('<h3>Рабочие часы</h3><label>Есть ли ставка?</label><div class="chips">' +
     '<button class="chip ' + (w.mode === 'rate' ? 'on' : '') + '" data-act="wmode" data-v="rate">Есть ставка за час</button>' +
     '<button class="chip ' + (w.mode === 'range' ? 'on' : '') + '" data-act="wmode" data-v="range">Нет ставки</button>' +
@@ -2022,7 +2028,7 @@ function openWork(){
     '<div id="w-rate" style="' + (w.mode === 'rate' ? '' : 'display:none') + '"><label>Ставка, ' + SYM() + ' в час</label><input id="w-r" inputmode="decimal" value="' + (w.rate || '') + '" placeholder="Например, 450" autocomplete="off"></div>' +
     '<div id="w-range" style="' + (w.mode === 'range' ? '' : 'display:none') + '"><label>Сколько обычно получаете за месяц, ' + SYM() + '</label><div class="row2"><input id="w-min" inputmode="decimal" value="' + (w.min || '') + '" placeholder="от, например 65000" style="flex:1" autocomplete="off"><input id="w-max" inputmode="decimal" value="' + (w.max || '') + '" placeholder="до, например 97000" style="flex:1" autocomplete="off"></div>' +
     '<div class="hi" style="margin:.4rem .25rem 0;font-size:.8rem;font-weight:600">Часы нужны только для учёта: по ним прикинем цену вашего часа.</div></div>' +
- '<div id="w-bonus" style="' + (w.mode === 'fixed' ? 'display:none' : '') + '"><label>Премия в месяц, ' + SYM() + ' (если бывает)</label><input id="w-b" inputmode="decimal" value="' + (w.bonus || '') + '" placeholder="Необязательно" autocomplete="off"></div>' +
+ '<div id="w-bonus" style="' + (w.mode === 'fixed' ? 'display:none' : '') + '"><label>Доход месяца</label><div class="chips"><button class="chip ' + (w.auto !== false ? 'on' : '') + '" data-act="wauto" data-v="1">Считать по часам</button><button class="chip ' + (w.auto === false ? 'on' : '') + '" data-act="wauto" data-v="0">Как в настройках</button></div><label>Премия в месяц, ' + SYM() + ' (если бывает)</label><input id="w-b" inputmode="decimal" value="' + (w.bonus || '') + '" placeholder="Необязательно" autocomplete="off"></div>' +
     (S.work ? '<button class="btn ghost danger" data-act="workoff">Выключить учёт часов</button>' : '') +
     '<button class="btn big" data-act="worksave">Сохранить</button>');
 }
@@ -2048,9 +2054,9 @@ function spentSheet(){
 }
 function incomeSheet(){
   var k = curKey(), ex = opsOf(k).filter(function(o){ return o.type === 'income'; }).sort(function(a, b){ return a.date < b.date ? 1 : -1; });
-  var h = '<h3>Доход · ' + MONTHS[VM.m] + '</h3><div class="brow"><div class="bm"><b><span>Основной доход</span><span>' + fmt(baseIncome(k)) + '</span></b></div></div>';
+  var h = '<h3>Доход · ' + MONTHS[VM.m] + '</h3><div class="brow"><div class="bm"><b><span>' + (workAuto(k) ? 'По часам: ' + fmtH(hoursOf(k)) : 'Основной доход') + '</span><span>' + fmt(workAuto(k) ? earnedOf(k) : baseIncome(k)) + '</span></b></div></div>';
   h += ex.map(function(o){ return '<div class="brow"><div class="bm"><b><span>' + esc(o.note || 'Доп. поступление') + '</span><span>+' + fmt(o.amount) + '</span></b><div class="hi" style="font-size:.78rem;font-weight:600">' + o.date.slice(8,10) + '.' + o.date.slice(5,7) + '</div></div></div>'; }).join('');
-  if (S.work && scope === 'me') { var c = workCalc(k); if (c && c.rate > 0) h += '<div class="hi" style="margin:.6rem .1rem 0;font-weight:600">По часам: отработано ' + fmtH(c.worked) + ', это ≈ ' + fmt(Math.round(c.earned)) + ' по оценке ставки. В доход эта сумма не входит: основной доход задаётся в настройках.</div>'; }
+  if (S.work && scope === 'me') { var c = workCalc(k); if (c && c.rate > 0) h += '<div class="hi" style="margin:.6rem .1rem 0;font-weight:600">По часам: отработано ' + fmtH(c.worked) + ', это ≈ ' + fmt(Math.round(c.earned)) + ' по оценке ставки. ' + (workAuto(k) ? 'Доход месяца считается по часам.' : 'В доход эта сумма не входит: основной доход задаётся в настройках.') + '</div>'; }
   sheet(h + '<div class="btot"><span>Всего</span><span>' + fmt(incomeOf(k)) + '</span></div>');
 }
 function exportCard(){
