@@ -750,7 +750,9 @@ function alertCard(k){
   var lim = over.length ? '<span class="wl">Лимит превышен: ' + over.join(', ') + '</span>' : '';
   if (!f) return over.length ? '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Лимит превышен</b><span>' + over.join(', ') + '</span></div>' + x + '</div>' : '';
   if (empty) return '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Бюджет месяца исчерпан</b><span>Остаток с учётом платежей: ' + fmt(f.left) + '</span>' + lim + '</div>' + x + '</div>';
-  return '<div class="safe' + ((neg || over.length) ? ' bad' : '') + '"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>' + (neg ? 'Сегодня сверх нормы: ' + fmt(-f.rest) : 'Безопасно потратить сегодня: ' + fmt(f.rest)) + '</b><span>По ' + fmt(f.allowance) + ' в день до конца месяца' + (f.bills > 0 ? ' · учтены платежи ' + fmt(f.bills) : '') + '</span>' + lim + '</div>' + x + '</div>';
+  var inf = 'По ' + fmt(f.allowance) + ' в день до конца месяца' + (f.bills > 0 ? ' · учтены платежи ' + fmt(f.bills) : '');
+  if (!neg && over.length) return '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Лимит превышен: ' + over.join(', ') + '</b><span>Сегодня можно потратить ' + fmt(f.rest) + ' · ' + inf + '</span></div>' + x + '</div>';
+  return '<div class="safe' + (neg ? ' bad' : '') + '"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>' + (neg ? 'Сегодня сверх нормы: ' + fmt(-f.rest) : 'Безопасно потратить сегодня: ' + fmt(f.rest)) + '</b><span>' + inf + '</span>' + lim + '</div>' + x + '</div>';
 }
 function summaryBanner(){
   var n = new Date(); if (n.getDate() > 3 || !isCur()) return '';
