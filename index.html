@@ -587,7 +587,7 @@ function normalize(s){
   if (!SCALES[s.scale]) s.scale = 'm';
   if (s.work && typeof s.work === 'object') {
     var w = s.work;
-    w.mode = w.mode === 'rate' ? 'rate' : 'range';
+    w.mode = w.mode === 'rate' || w.mode === 'fixed' ? w.mode : 'range';
     ['rate','min','max','bonus'].forEach(function(k){ w[k] = typeof w[k] === 'number' && isFinite(w[k]) && w[k] > 0 ? w[k] : 0; });
     w.shifts = Array.isArray(w.shifts) ? w.shifts.filter(function(x){ return x && typeof x.date === 'string' && typeof x.h === 'number' && x.h > 0; }) : [];
   } else delete s.work;
@@ -1537,16 +1537,22 @@ var ACT = {
   spentlist: function(){ spentSheet(); },
   inclist: function(){ incomeSheet(); },
   workset: function(){ openWork(); },
+  applyearn: function(){
+    var k = curKey(), c = workCalc(k); if (!c || c.rate <= 0) return;
+    var v = Math.round(c.earned + c.bonus);
+    confirmBox('Поставить доход месяца ' + fmt(v) + ' по отработанным часам? Сейчас ' + fmt(baseIncome(k)) + '.', function(){ S.income[k] = v; save(); render(); toast('Доход месяца обновлён'); });
+  },
   workdis: function(){ try { localStorage.setItem('kp_wkdis', '1'); } catch (e) {} render(); },
   wmode: function(d, el){
     workMode = d.v;
     document.querySelectorAll('[data-act="wmode"]').forEach(function(b){ b.classList.toggle('on', b === el); });
     $('#w-rate').style.display = d.v === 'rate' ? '' : 'none'; $('#w-range').style.display = d.v === 'range' ? '' : 'none';
+    $('#w-fixed').style.display = d.v === 'fixed' ? '' : 'none'; $('#w-bonus').style.display = d.v === 'fixed' ? 'none' : '';
   },
   worksave: function(){
     var r = num($('#w-r').value), mn = num($('#w-min').value), mx = num($('#w-max').value), b = num($('#w-b').value);
     if (mn > 0 && mx > 0 && mn > mx) { var t = mn; mn = mx; mx = t; }
-    if (workMode === 'rate' ? r <= 0 : (mn <= 0 && mx <= 0)) { toast(workMode === 'rate' ? 'Введите ставку' : 'Введите, сколько получаете'); return; }
+    if (workMode !== 'fixed' && (workMode === 'rate' ? r <= 0 : (mn <= 0 && mx <= 0))) { toast(workMode === 'rate' ? 'Введите ставку' : 'Введите, сколько получаете'); return; }
     var old = S.work ? S.work.shifts : [];
     S.work = {mode: workMode, rate: r > 0 ? r : 0, min: mn > 0 ? mn : 0, max: mx > 0 ? mx : 0, bonus: b > 0 ? b : 0, shifts: old};
     save(); closeSheet(); render(); toast('Сохранено');
@@ -1983,10 +1989,12 @@ function workCard(){
     if (workDis()) return '';
     return '<div class="plan slim wq" data-act="workset">' + ic('clock', 20) + '<b>Какая у вас зарплата: есть ставка или нет?</b><button class="x" data-act="workdis" aria-label="Скрыть">×</button></div>';
   }
-  var k = curKey(), c = workCalc(k);
+  var k = curKey(), c = w.mode === 'fixed' ? {rate: 1, worked: hoursOf(k), fixed: true} : workCalc(k);
   var h = '<div class="card wk"><div class="wh">' + ic('clock', 20) + '<b>Часы</b><button class="gadd" data-act="newshift" aria-label="Записать смену">' + ic('plus', 22) + '</button></div>';
   if (!c || c.rate <= 0) return h + '<div class="wnote" data-act="workset">Укажите ставку или диапазон дохода, чтобы считать часы</div></div>';
   h += '<div class="wrow"><span>Отработано в этом месяце</span><b>' + fmtH(c.worked) + '</b></div>';
+  if (c.fixed) return h + '<div class="wnote" data-act="workset">Зарплата фиксированная: доход от часов не зависит · изменить</div></div>';
+  if (c.worked > 0) h += '<div class="wrow" data-act="applyearn" style="cursor:pointer"><span>Заработано по часам' + (c.bonus ? ' с премией' : '') + '</span><b>≈ ' + fmt(Math.round(c.earned + c.bonus)) + ' ›</b></div>';
   if (isCur()) {
     h += '<div class="wrow"><span>На базовые расходы (' + fmt(c.basics) + ')</span><b>' + fmtH(c.needB) + (c.remB > 0 ? ' · ещё ' + fmtH(c.remB) : ' ✓') + '</b></div>';
     if (c.goalPer > 0) h += '<div class="wrow"><span>И на цель (' + fmt(c.goalPer) + ')</span><b>' + fmtH(c.needG) + (c.remG > 0 ? ' · ещё ' + fmtH(c.remG) : ' ✓') + '</b></div>';
@@ -2008,11 +2016,13 @@ function openWork(){
   workMode = w.mode;
   sheet('<h3>Рабочие часы</h3><label>Есть ли ставка?</label><div class="chips">' +
     '<button class="chip ' + (w.mode === 'rate' ? 'on' : '') + '" data-act="wmode" data-v="rate">Есть ставка за час</button>' +
-    '<button class="chip ' + (w.mode === 'range' ? 'on' : '') + '" data-act="wmode" data-v="range">Нет ставки</button></div>' +
+    '<button class="chip ' + (w.mode === 'range' ? 'on' : '') + '" data-act="wmode" data-v="range">Нет ставки</button>' +
+    '<button class="chip ' + (w.mode === 'fixed' ? 'on' : '') + '" data-act="wmode" data-v="fixed">Фиксированная зарплата</button></div>' +
+    '<div id="w-fixed" class="hi" style="margin:.6rem .25rem 0;font-weight:600;' + (w.mode === 'fixed' ? '' : 'display:none') + '">Доход остаётся как в настройках, часы идут только для учёта. Премию или переработку добавляйте как доход.</div>' +
     '<div id="w-rate" style="' + (w.mode === 'rate' ? '' : 'display:none') + '"><label>Ставка, ' + SYM() + ' в час</label><input id="w-r" inputmode="decimal" value="' + (w.rate || '') + '" placeholder="Например, 450" autocomplete="off"></div>' +
     '<div id="w-range" style="' + (w.mode === 'range' ? '' : 'display:none') + '"><label>Сколько обычно получаете за месяц, ' + SYM() + '</label><div class="row2"><input id="w-min" inputmode="decimal" value="' + (w.min || '') + '" placeholder="от, например 65000" style="flex:1" autocomplete="off"><input id="w-max" inputmode="decimal" value="' + (w.max || '') + '" placeholder="до, например 97000" style="flex:1" autocomplete="off"></div>' +
     '<div class="hi" style="margin:.4rem .25rem 0;font-size:.8rem;font-weight:600">Часы нужны только для учёта: по ним прикинем цену вашего часа.</div></div>' +
-    '<label>Премия в месяц, ' + SYM() + ' (если бывает)</label><input id="w-b" inputmode="decimal" value="' + (w.bonus || '') + '" placeholder="Необязательно" autocomplete="off">' +
+ '<div id="w-bonus" style="' + (w.mode === 'fixed' ? 'display:none' : '') + '"><label>Премия в месяц, ' + SYM() + ' (если бывает)</label><input id="w-b" inputmode="decimal" value="' + (w.bonus || '') + '" placeholder="Необязательно" autocomplete="off"></div>' +
     (S.work ? '<button class="btn ghost danger" data-act="workoff">Выключить учёт часов</button>' : '') +
     '<button class="btn big" data-act="worksave">Сохранить</button>');
 }
