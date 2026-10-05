@@ -255,6 +255,17 @@ body{font-weight:500}
 .safe.warn{background:rgba(245,158,11,.15);color:#d97706}
 .safe .x{margin-left:auto;flex:none;width:1.9rem;height:1.9rem;border-radius:50%;border:0;background:rgba(127,127,127,.16);color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .safe .wl{display:block;margin-top:.3rem;font-size:.8rem;font-weight:700}
+.wk{margin:.75rem 0 .25rem}
+.wk .wh{display:flex;align-items:center;gap:.6rem;font-weight:800}
+.wk .wh b{flex:1;font-size:1.05rem}
+.wk .wh .gadd{flex:none}
+.wk .wrow{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--line);font-size:.92rem}
+.wk .wrow:last-of-type{border-bottom:0}
+.wk .wrow span{color:var(--muted);font-weight:600}
+.wk .wrow b{text-align:right}
+.wk .wnote{font-size:.78rem;font-weight:600;color:var(--muted);margin-top:.4rem}
+.wq{position:relative}
+.wq .x{margin-left:auto;flex:none;width:1.9rem;height:1.9rem;border-radius:50%;border:0;background:rgba(127,127,127,.16);color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .sumcard .srow{display:flex;justify-content:space-between;gap:1rem;padding:.55rem .25rem;border-bottom:1px solid var(--line);font-size:.95rem}
 .sumcard .srow:last-child{border-bottom:0}
 .sumcard .srow span{color:var(--muted);font-weight:600}
@@ -425,6 +436,7 @@ var I = {
   pie:'<path d="M12 3v9h9a9 9 0 1 1-9-9z"/><path d="M16 3.6A9 9 0 0 1 20.4 8H16z"/>',
   target:'<path d="M6 21V4"/><path d="M6 4h11l-2.5 3.8L17 11.5H6"/>',
   chart:'<path d="M5 20v-7M12 20V5M19 20v-10"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   gear:'<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
   pencil:'<path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/>',
@@ -565,6 +577,12 @@ function normalize(s){
   if (typeof s.name !== 'string') s.name = '';
   if (!THEMES[s.theme]) s.theme = 'vio';
   if (!SCALES[s.scale]) s.scale = 'm';
+  if (s.work && typeof s.work === 'object') {
+    var w = s.work;
+    w.mode = w.mode === 'rate' ? 'rate' : 'range';
+    ['rate','min','max','bonus'].forEach(function(k){ w[k] = typeof w[k] === 'number' && isFinite(w[k]) && w[k] > 0 ? w[k] : 0; });
+    w.shifts = Array.isArray(w.shifts) ? w.shifts.filter(function(x){ return x && typeof x.date === 'string' && typeof x.h === 'number' && x.h > 0; }) : [];
+  } else delete s.work;
   s.goals.forEach(function(g){ if (!Array.isArray(g.contribs)) g.contribs = []; if (g.img == null) g.img = ''; });
   if (!s.goals.some(function(g){ return g.id === s.mainGoal; })) s.mainGoal = s.goals[0] ? s.goals[0].id : '';
   return s;
@@ -867,6 +885,7 @@ function vHome(){
     '<div class="row"><div class="mini"><span>Доход</span><b>'+fmt(incomeOf(k))+'</b></div><div class="mini"><span>Потрачено</span><b>'+fmt(spentOf(k))+'</b></div></div></div>';
   h += alertCard(k) + streakChip() + summaryBanner();
   if (g) h += goalMini(g);
+  h += workCard();
   h += '<div class="plan slim" data-act="plan">'+ic('calc',20)+'<b>Спланировать бюджет</b><span>›</span></div>';
   h += '<div class="sec"><h2>Категории</h2></div>';
   h += S.cats.length ? '<div class="hgrid">' + S.cats.map(function(c){ return catCard(c, k); }).join('') + '</div>' : '<div class="card empty">Категорий пока нет. Откройте «Спланировать бюджет» и добавьте их.</div>';
@@ -1070,7 +1089,7 @@ function vProf(){
     '<div class="card prof"><div class="ava">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span class="pchip '+(st === 'premium' ? 'gold' : '')+'">'+(st === 'premium' ? '★ ' : '')+chip+'</span></div></div>' +
     '<div class="plan slim setlink" data-act="opensettings">'+ic('gear',20)+'<b>Настройки</b><span>›</span></div>' +
     (PLAN && PLAN.owner ? '<div class="plan slim setlink" data-act="stats">'+ic('chart',20)+'<b>Статистика</b><span>›</span></div>' : '') +
-    planCard() + recurCard() + familyCard() + refCard() + accountCard() + supportCard() +
+    planCard() + (scope === 'me' ? workListCard() : '') + recurCard() + familyCard() + refCard() + accountCard() + supportCard() +
     '<div class="ver">Копилка · ' + (ONLINE ? 'данные синхронизируются с сервером' : 'данные хранятся на этом устройстве') + '</div>';
 }
 function currencyCard(){
@@ -1503,6 +1522,35 @@ var ACT = {
   },
   remtog: function(d){ if (!PREFS[d.k] && gate('Напоминания в боте')) return; PREFS[d.k] = !PREFS[d.k]; savePrefs(); render(); },
   remhour: function(d){ PREFS.hour = Number(d.v); savePrefs(); render(); },
+  workset: function(){ openWork(); },
+  workdis: function(){ try { localStorage.setItem('kp_wkdis', '1'); } catch (e) {} render(); },
+  wmode: function(d, el){
+    workMode = d.v;
+    document.querySelectorAll('[data-act="wmode"]').forEach(function(b){ b.classList.toggle('on', b === el); });
+    $('#w-rate').style.display = d.v === 'rate' ? '' : 'none'; $('#w-range').style.display = d.v === 'range' ? '' : 'none';
+  },
+  worksave: function(){
+    var r = num($('#w-r').value), mn = num($('#w-min').value), mx = num($('#w-max').value), b = num($('#w-b').value);
+    if (mn > 0 && mx > 0 && mn > mx) { var t = mn; mn = mx; mx = t; }
+    if (workMode === 'rate' ? r <= 0 : (mn <= 0 && mx <= 0)) { toast(workMode === 'rate' ? 'Введите ставку' : 'Введите, сколько получаете'); return; }
+    var old = S.work ? S.work.shifts : [];
+    S.work = {mode: workMode, rate: r > 0 ? r : 0, min: mn > 0 ? mn : 0, max: mx > 0 ? mx : 0, bonus: b > 0 ? b : 0, shifts: old};
+    save(); closeSheet(); render(); toast('Сохранено');
+  },
+  workoff: function(){ confirmBox('Выключить учёт часов? Записанные смены удалятся.', function(){ delete S.work; save(); closeSheet(); render(); }); },
+  newshift: function(){ if (!S.work) { openWork(); return; } openShift(); },
+  saveshift: function(){
+    var date = $('#s-date').value, from = $('#s-from').value, to = $('#s-to').value, hh = num($('#s-h').value);
+    var h = hh > 0 ? hh : shiftHours(from, to);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('Выберите дату'); return; }
+    if (h <= 0 || h > 24) { toast('Введите время или часы'); return; }
+    S.work.shifts.push({id: uid(), date: date, from: hh > 0 ? '' : from, to: hh > 0 ? '' : to, h: Math.round(h * 10) / 10});
+    save(); closeSheet(); render(); toast('Смена записана: ' + fmtH(h));
+  },
+  delshift: function(d){
+    var x = S.work.shifts.filter(function(s){ return s.id === d.id; })[0]; if (!x) return;
+    confirmBox('Удалить смену ' + x.date.slice(8,10) + '.' + x.date.slice(5,7) + ' (' + fmtH(x.h) + ')?', function(){ S.work.shifts = S.work.shifts.filter(function(s){ return s.id !== d.id; }); save(); render(); });
+  },
   newrec: function(){ if (gate('Регулярные платежи')) return; openRecur(); },
   reccat: function(d, el){ recCat = d.id; document.querySelectorAll('[data-act="reccat"]').forEach(function(b){ b.classList.toggle('on', b === el); }); },
   saverec: function(){
@@ -1868,6 +1916,81 @@ function applyRecurring(){
     }
   });
   if (added) save();
+}
+/* ---------- Рабочие часы ---------- */
+var WORK_NORM = 160, workMode = 'rate';
+function workDis(){ try { return localStorage.getItem('kp_wkdis') === '1'; } catch (e) { return false; } }
+function workRate(w){
+  if (w.mode === 'rate') return w.rate || 0;
+  var mid = w.min && w.max ? (w.min + w.max) / 2 : (w.max || w.min || 0);
+  return mid / WORK_NORM;
+}
+function hoursOf(k){ return sum(((S.work && S.work.shifts) || []).filter(function(x){ return x.date.slice(0,7) === k; }).map(function(x){ return x.h; })); }
+function fmtH(h){ h = Math.round(h * 10) / 10; return String(h).replace('.', ',') + ' ч'; }
+function shiftHours(from, to){
+  var a = /^(\d{1,2}):(\d{2})$/.exec(from || ''), b = /^(\d{1,2}):(\d{2})$/.exec(to || '');
+  if (!a || !b) return 0;
+  var m = (+b[1] * 60 + +b[2]) - (+a[1] * 60 + +a[2]); if (m <= 0) m += 1440;
+  return Math.round(m / 6) / 10;
+}
+function workCalc(k){
+  var w = S.work; if (!w) return null;
+  var rate = workRate(w); if (rate <= 0) return {rate: 0, worked: hoursOf(k)};
+  var g = goalById(S.mainGoal), p = g ? plan(g) : null, goalPer = p && !p.done ? p.per : 0;
+  var limits = sum(S.cats.map(function(c){ return c.limit > 0 ? c.limit : 0; }));
+  var basics = Math.max(limits, spentOf(k) + upcomingBills());
+  var bonus = w.bonus || 0, worked = hoursOf(k);
+  var needB = Math.max(0, basics - bonus) / rate, needG = Math.max(0, basics + goalPer - bonus) / rate;
+  var dl = daysLeft();
+  var remB = Math.max(0, needB - worked), remG = Math.max(0, needG - worked);
+  return {rate: rate, worked: worked, basics: basics, goalPer: goalPer, bonus: bonus, needB: needB, needG: needG, remB: remB, remG: remG, dl: dl, perDay: dl ? remG / dl : 0, earned: worked * rate};
+}
+function workCard(){
+  if (scope !== 'me') return '';
+  var w = S.work;
+  if (!w) {
+    if (workDis()) return '';
+    return '<div class="plan slim wq" data-act="workset">' + ic('clock', 20) + '<b>Какая у вас зарплата: есть ставка или нет?</b><button class="x" data-act="workdis" aria-label="Скрыть">×</button></div>';
+  }
+  var k = curKey(), c = workCalc(k);
+  var h = '<div class="card wk"><div class="wh">' + ic('clock', 20) + '<b>Часы</b><button class="gadd" data-act="newshift" aria-label="Записать смену">' + ic('plus', 22) + '</button></div>';
+  if (!c || c.rate <= 0) return h + '<div class="wnote" data-act="workset">Укажите ставку или диапазон дохода, чтобы считать часы</div></div>';
+  h += '<div class="wrow"><span>Отработано в этом месяце</span><b>' + fmtH(c.worked) + '</b></div>';
+  if (isCur()) {
+    h += '<div class="wrow"><span>На базовые расходы (' + fmt(c.basics) + ')</span><b>' + fmtH(c.needB) + (c.remB > 0 ? ' · ещё ' + fmtH(c.remB) : ' ✓') + '</b></div>';
+    if (c.goalPer > 0) h += '<div class="wrow"><span>И на цель (' + fmt(c.goalPer) + ')</span><b>' + fmtH(c.needG) + (c.remG > 0 ? ' · ещё ' + fmtH(c.remG) : ' ✓') + '</b></div>';
+    if (c.remG > 0 && c.dl) h += '<div class="wrow"><span>В среднем в день до конца месяца</span><b>' + fmtH(c.perDay) + '</b></div>';
+  }
+  h += '<div class="wnote" data-act="workset">' + (w.mode === 'rate' ? 'Ставка ' + fmt(w.rate) + '/ч' : 'Оценка ≈ ' + fmt(Math.round(c.rate)) + '/ч (доход ' + fmt(w.min || w.max) + (w.min && w.max && w.max !== w.min ? '–' + fmt(w.max) : '') + ')') + (c.bonus ? ' · премия ' + fmt(c.bonus) : '') + ' · изменить</div></div>';
+  return h;
+}
+function workListCard(){
+  if (!S.work) return '';
+  var list = S.work.shifts.slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }).slice(0, 10);
+  return '<div class="card set"><label style="margin-top:0">Смены</label>' +
+    (list.length ? list.map(function(x){ return '<div class="rec" data-act="delshift" data-id="' + x.id + '"><div>' + x.date.slice(8,10) + '.' + x.date.slice(5,7) + '<br><span>' + (x.from && x.to ? x.from + ' – ' + x.to : 'без времени') + '</span></div><b>' + fmtH(x.h) + '</b></div>'; }).join('') +
+      '<div class="hi" style="margin:.4rem .25rem .6rem;font-size:.8rem;font-weight:600">Нажмите на смену, чтобы удалить</div>' : '<div class="hi" style="margin:0 .25rem .6rem;font-weight:600">Смен пока нет.</div>') +
+    '<button class="btn ghost" data-act="newshift">' + ic('plus', 22) + ' Записать смену</button></div>';
+}
+function openWork(){
+  var w = S.work || {mode: 'rate', rate: 0, min: 0, max: 0, bonus: 0};
+  workMode = w.mode;
+  sheet('<h3>Рабочие часы</h3><label>Есть ли ставка?</label><div class="chips">' +
+    '<button class="chip ' + (w.mode === 'rate' ? 'on' : '') + '" data-act="wmode" data-v="rate">Есть ставка за час</button>' +
+    '<button class="chip ' + (w.mode === 'range' ? 'on' : '') + '" data-act="wmode" data-v="range">Нет ставки</button></div>' +
+    '<div id="w-rate" style="' + (w.mode === 'rate' ? '' : 'display:none') + '"><label>Ставка, ' + SYM() + ' в час</label><input id="w-r" inputmode="decimal" value="' + (w.rate || '') + '" placeholder="Например, 450" autocomplete="off"></div>' +
+    '<div id="w-range" style="' + (w.mode === 'range' ? '' : 'display:none') + '"><label>Сколько обычно получаете за месяц, ' + SYM() + '</label><div class="row2"><input id="w-min" inputmode="decimal" value="' + (w.min || '') + '" placeholder="от, например 65000" style="flex:1" autocomplete="off"><input id="w-max" inputmode="decimal" value="' + (w.max || '') + '" placeholder="до, например 97000" style="flex:1" autocomplete="off"></div>' +
+    '<div class="hi" style="margin:.4rem .25rem 0;font-size:.8rem;font-weight:600">Часы нужны только для учёта: по ним прикинем цену вашего часа.</div></div>' +
+    '<label>Премия в месяц, ' + SYM() + ' (если бывает)</label><input id="w-b" inputmode="decimal" value="' + (w.bonus || '') + '" placeholder="Необязательно" autocomplete="off">' +
+    (S.work ? '<button class="btn ghost danger" data-act="workoff">Выключить учёт часов</button>' : '') +
+    '<button class="btn big" data-act="worksave">Сохранить</button>');
+}
+function openShift(){
+  var def = S.work && S.work.shifts.length ? S.work.shifts[S.work.shifts.length - 1] : null;
+  sheet('<h3>Смена</h3><label>Дата</label><input id="s-date" type="date" value="' + today() + '">' +
+    '<label>Начало и конец</label><div class="row2"><input id="s-from" type="time" value="' + (def && def.from || '08:00') + '" style="flex:1"><input id="s-to" type="time" value="' + (def && def.to || '17:00') + '" style="flex:1"></div>' +
+    '<label>Или сразу часы</label><input id="s-h" inputmode="decimal" placeholder="Например, 8,5" autocomplete="off">' +
+    '<button class="btn big" data-act="saveshift">Записать</button>');
 }
 function exportCard(){
   return '<div class="card set"><label style="margin-top:0">Экспорт</label><button class="btn ghost" data-act="export">Выгрузить операции (CSV для Excel)</button></div>';
