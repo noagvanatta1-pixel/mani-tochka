@@ -43,6 +43,9 @@ h1,h2,h3,p{margin:0}
 .sec{display:flex;align-items:center;justify-content:space-between;margin:1.375rem 0.25rem 0.75rem}
 .sec h2{font-size:1.3125rem;font-weight:800}
 .sec a{color:var(--pink-d);font-weight:700;font-size:1rem;cursor:pointer}
+.catedit{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem .9rem;border-radius:.8rem;background:var(--btn);color:#fff;border:0;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 0 .6rem rgba(162,132,247,.45)}
+.cg.add{border:1.5px dashed var(--pink-d);background:transparent;color:var(--pink-d)}
+.cg.add b{font-size:1.4rem;line-height:1;font-weight:700}
 .card{background:var(--card);border-radius:var(--r);padding:0.875rem;box-shadow:0 0.375rem 1.5rem rgba(var(--sh),.08);margin-bottom:0.75rem}
 .gimg{position:relative;height:10.625rem;border-radius:1.25rem;overflow:hidden;background:linear-gradient(135deg,var(--pink-l),var(--pink))}
 .gimg img{width:100%;height:100%;object-fit:cover;display:block}
@@ -906,7 +909,7 @@ function vHome(){
   if (g) h += goalMini(g);
   h += workCard();
   h += '<div class="plan slim" data-act="plan">'+ic('calc',20)+'<b>Спланировать бюджет</b><span>›</span></div>';
-  h += '<div class="sec"><h2>Категории</h2></div>';
+  h += '<div class="sec"><h2>Категории</h2><button class="catedit" data-act="catmanage">' + ic('gear', 16) + ' Изменить</button></div>';
   h += S.cats.length ? '<div class="hgrid">' + S.cats.map(function(c){ return catCard(c, k); }).join('') + '</div>' : '<div class="card empty">Категорий пока нет. Откройте «Спланировать бюджет» и добавьте их.</div>';
   return h + recentOps(k);
 }
@@ -1181,27 +1184,39 @@ function openOp(catId){
   sheet('<h3>Новая операция</h3>' +
     '<div class="seg"><button class="on" data-act="optype" data-v="expense">Расход</button><button data-act="optype" data-v="income">Доход</button></div>' +
     '<div class="amtbox"><input id="f-amt" inputmode="decimal" placeholder="0" autocomplete="off"><span id="f-sym">'+SYM()+'</span></div>' + curRow() + recentChips() +
-    '<div id="f-cats"><label>Категория</label><div class="cgrid">' + S.cats.map(function(c){ return '<button class="cg '+(c.id === opCat ? 'on' : '')+'" data-act="opcat" data-id="'+c.id+'"><b>'+ci(c.emoji)+'</b>'+esc(c.name)+'</button>'; }).join('') + '</div></div>' +
+    '<div id="f-cats"><label>Категория</label><div class="cgrid">' + S.cats.map(function(c){ return '<button class="cg '+(c.id === opCat ? 'on' : '')+'" data-act="opcat" data-id="'+c.id+'"><b>'+ci(c.emoji)+'</b>'+esc(c.name)+'</button>'; }).join('') + '<button class="cg add" data-act="opnewcat"><b>+</b>Своя</button></div></div>' +
     '<label>Комментарий</label><input id="f-note" placeholder="Необязательно" autocomplete="off">' +
     '<label>Дата</label><div class="row2"><button class="chip '+(isCur() ? 'on' : '')+'" data-act="opdate" data-v="0">Сегодня</button><button class="chip" data-act="opdate" data-v="1">Вчера</button><input id="f-date" type="date" value="'+d+'"></div>' +
     '<button class="btn big" data-act="saveop">Сохранить</button>');
+  if (opDraft) { var da = $('#f-amt'), dn = $('#f-note'); if (da) da.value = opDraft.amt; if (dn) dn.value = opDraft.note; opDraft = null; fmtAllFields($('#sheet')); }
   setTimeout(function(){ var a = $('#f-amt'); if (a) a.focus(); }, 320);
 }
 
-var backToPlan = false;
+var backToPlan = false, backToCats = false, backToOp = false, opDraft = null, lastCatId = '';
+function openCats(){
+  var h = '<h3>Категории</h3><div class="hi" style="margin:.2rem .25rem .6rem;font-weight:600">Нажмите на категорию, чтобы переименовать, поменять значок и лимит или удалить.</div>';
+  h += S.cats.length ? S.cats.map(function(c){
+    return '<div class="rec" data-act="editcatm" data-id="' + c.id + '"><div>' + ci(c.emoji, 'sm') + ' ' + esc(c.name) + '<br><span>' + (c.limit > 0 ? 'лимит ' + fmt(c.limit) : 'без лимита') + '</span></div><span class="edpill">Изменить</span></div>';
+  }).join('') : '<div class="empty">Категорий пока нет</div>';
+  sheet(h + '<button class="btn ghost" style="margin-top:.8rem" data-act="newcatm">+ Добавить категорию</button>');
+}
 function commitPlan(){
   if (!$('#p-inc')) return;
   S.income[curKey()] = num($('#p-inc').value);
   document.querySelectorAll('.plim').forEach(function(i){ var c = catById(i.dataset.id); if (c) c.limit = num(i.value); });
   save();
 }
-function afterCat(){ var b = backToPlan; backToPlan = false; closeSheet(); render(); if (b) setTimeout(openPlan, 120); }
+function afterCat(){
+  var bp = backToPlan, bc = backToCats, bo = backToOp; backToPlan = backToCats = backToOp = false;
+  closeSheet(); render();
+  if (bp) setTimeout(openPlan, 120); else if (bc) setTimeout(openCats, 120); else if (bo) setTimeout(function(){ openOp(lastCatId); }, 120);
+}
 function openPlan(){
   var k = curKey();
   sheet('<h3>Бюджет на '+MONTHS[VM.m].toLowerCase()+'</h3><label>Доход на месяц, '+SYM()+'</label><input id="p-inc" inputmode="decimal" value="'+baseIncome(k)+'">' +
     '<div class="free" id="p-free"></div>' +
-    '<label>Категории и лимиты</label>' + S.cats.map(function(c){ return '<div class="plrow"><div class="em" data-act="editcat" data-id="'+c.id+'">'+ci(c.emoji)+'</div><span data-act="editcat" data-id="'+c.id+'">'+esc(c.name)+' <i class="pen">✎</i></span><input class="plim" data-id="'+c.id+'" inputmode="decimal" value="'+c.limit+'"></div>'; }).join('') +
-    '<button class="btn ghost" style="margin-top:.8rem" data-act="newcat">+ Новая категория</button>' +
+    '<label>Категории и лимиты</label><div class="hi" style="margin:0 .25rem .5rem;font-size:.82rem;font-weight:600">Нажмите на название, чтобы переименовать или удалить.</div><button class="btn ghost" style="margin:0 0 .6rem" data-act="newcat">+ Добавить категорию</button>' + S.cats.map(function(c){ return '<div class="plrow"><div class="em" data-act="editcat" data-id="'+c.id+'">'+ci(c.emoji)+'</div><span data-act="editcat" data-id="'+c.id+'">'+esc(c.name)+' <i class="pen">✎</i></span><input class="plim" data-id="'+c.id+'" inputmode="decimal" value="'+c.limit+'"></div>'; }).join('') +
+
     '<button class="btn big" data-act="saveplan">Сохранить</button>');
   updPlan();
 }
@@ -1356,6 +1371,10 @@ var ACT = {
   undo: function(){ var f = undoFn; hideUndo(); if (f) f(); },
   plan: function(){ backToPlan = false; openPlan(); },
   newcat: function(){ commitPlan(); backToPlan = true; openCat(); },
+  catmanage: function(){ openCats(); },
+  editcatm: function(d){ backToCats = true; openCat(d.id); },
+  newcatm: function(){ backToCats = true; openCat(); },
+  opnewcat: function(){ var a = $('#f-amt'), n = $('#f-note'); opDraft = {amt: a ? a.value : '', note: n ? n.value : ''}; backToOp = true; openCat(); },
   editcat: function(d){ commitPlan(); backToPlan = true; openCat(d.id); },
   newgoal: function(){ if (S.goals.length >= 1 && gate('Несколько целей')) return; openGoal(); },
   editgoal: function(d){ openGoal(d.id); },
@@ -1466,14 +1485,14 @@ var ACT = {
     });
   },
   addpreset: function(d, el){
-    S.cats.push({id: uid(), name: d.n, emoji: d.e, limit: 0});
-    save(); el.remove(); render(); haptic(); toast('Добавлено: ' + d.n); if (backToPlan) { backToPlan = false; closeSheet(); setTimeout(openPlan, 120); }
+    var np = {id: uid(), name: d.n, emoji: d.e, limit: 0}; S.cats.push(np); lastCatId = np.id;
+    save(); el.remove(); render(); haptic(); toast('Добавлено: ' + d.n); if (backToPlan || backToCats || backToOp) afterCat();
   },
   savecat: function(){
     var name = $('#c-name').value.trim(); if (!name) { toast('Введите название'); return; }
     var em = $('#c-em').value.trim() || '•', lim = num($('#c-lim').value);
     if (editId) { var c = catById(editId); c.name = name; c.emoji = em; c.limit = lim; }
-    else S.cats.push({id: uid(), name: name, emoji: em, limit: lim});
+    else { var nc = {id: uid(), name: name, emoji: em, limit: lim}; S.cats.push(nc); lastCatId = nc.id; }
     save(); afterCat();
   },
   delcat: function(d){
@@ -1631,7 +1650,7 @@ var ACT = {
 
 document.addEventListener('click', function(e){
   var t = e.target.closest('[data-tab],[data-act],[data-close]'); if (!t) return;
-  if (t.hasAttribute('data-close')) { backToPlan = false; closeSheet(); return; }
+  if (t.hasAttribute('data-close')) { backToPlan = backToCats = backToOp = false; opDraft = null; closeSheet(); return; }
   if (t.dataset.tab) { TAB = t.dataset.tab; window.scrollTo(0, 0); haptic('light'); render(); return; }
   if (ACT[t.dataset.act]) ACT[t.dataset.act](t.dataset, t);
 });
