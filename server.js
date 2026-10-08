@@ -531,6 +531,7 @@ async function handleApi(req, res, url) {
     if (id && YK_ON) await ykCheck(id).catch((e) => console.error('ЮKassa webhook:', e.message));
     return json(res, 200, { ok: true });
   }
+  if (url.pathname === '/api/web/login/available' && req.method === 'GET') return json(res, 200, { ok: !!(BOT_TOKEN && BOT_NAME) });
   if (url.pathname === '/api/web/login/start' && req.method === 'POST') {
     if (!BOT_TOKEN || !BOT_NAME) throw httpError(503, 'login unavailable');
     loginLimit(req, 'start', 20);

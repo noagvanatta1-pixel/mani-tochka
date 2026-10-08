@@ -1119,7 +1119,7 @@ function vAn(){
 }
 
 function accountCard(){
-  if (!ONLINE) return '<div class="card set"><label style="margin-top:0">Режим без аккаунта</label><div class="hi" style="margin:0 0.25rem 0.875rem">Данные хранятся только на этом устройстве.</div><button class="btn ghost" data-act="weblogin">Войти через Telegram</button></div>';
+  if (!ONLINE) return '<div class="card set"><label style="margin-top:0">Режим без аккаунта</label><div class="hi" style="margin:0 0.25rem">Данные хранятся только на этом устройстве.</div></div>';
   var st = syncState === 'ok' ? '☁️ Данные сохраняются на сервере' : (syncState === 'offline' ? '⚠️ Нет связи с сервером — сохраню, как только появится' : 'Подключаюсь…');
   return '<div class="card set"><label style="margin-top:0">Аккаунт</label><div class="hi" style="margin:0 0.25rem 0.875rem"><b style="color:var(--ink)">'+esc(tgUser.first_name || 'Вы')+'</b><br>'+st+'</div>' +
     (BOT ? '<button class="btn ghost" data-act="invite">'+ic('plus',22)+' Позвать друзей</button>' : '') +
@@ -1681,6 +1681,7 @@ document.addEventListener('click', function(e){
   var t = e.target.closest('[data-tab],[data-act],[data-close]'); if (!t) return;
   if (t.hasAttribute('data-close')) { backToPlan = backToCats = backToOp = false; opDraft = null; closeSheet(); return; }
   if (t.dataset.tab) { TAB = t.dataset.tab; window.scrollTo(0, 0); haptic('light'); render(); return; }
+  if (GATE && !OPEN_OK[t.dataset.act]) { loginStart(); return; }   // без входа любое действие просит войти через Telegram
   if (ACT[t.dataset.act]) ACT[t.dataset.act](t.dataset, t);
 });
 /* суммы с пробелами между тысячами: 90 000 */
@@ -2179,6 +2180,8 @@ function loadExtras(){
 }
 /* ---------- Вход через Telegram вне Telegram ---------- */
 var LOGIN = null;
+var GATE = false;   // вне Telegram без входа: пользоваться можно только после входа
+var OPEN_OK = {weblogin: 1, loginopen: 1, openbot: 1, opensettings: 1, dismissal: 1, legal: 1, support: 1};
 function webForget(reload){
   try { localStorage.removeItem('kp_web'); } catch(e){}
   WS = null;
@@ -2189,11 +2192,12 @@ function loginSheet(st){
   var L = LOGIN; if (!L) return;
   var body = st === 'denied' ? '<div class="hi" style="margin:.2rem .25rem">Вход отменён в Telegram.</div>' :
     st === 'expired' ? '<div class="hi" style="margin:.2rem .25rem">Время вышло. Нажмите «Войти» ещё раз.</div>' :
+    (GATE ? '<div class="hi" style="margin:.2rem .25rem .8rem">Чтобы пользоваться Копилкой, войдите через Telegram: так ваши данные сохранятся и не пропадут.</div>' : '') +
     '<div class="hi" style="margin:.2rem .25rem .6rem;font-weight:600">1. Нажмите «Открыть Telegram».<br>2. В боте сверьте код и нажмите «Это я».<br>3. Вернитесь сюда: вход произойдёт сам.</div>' +
     '<div id="lcode" style="text-align:center;font-size:2.6rem;font-weight:800;letter-spacing:.3rem;margin:.6rem 0 .2rem">' + esc(L.code) + '</div>' +
     '<div class="hi" style="text-align:center;margin:0 0 .6rem;font-size:.85rem;font-weight:600">Этот код должен совпасть с кодом в боте</div>' +
     '<button class="btn big" data-act="loginopen">Открыть Telegram</button>';
-  sheet('<h3>Вход через Telegram</h3>' + body);
+  sheet('<h3>Войдите через Telegram</h3>' + body);
 }
 function loginPoll(){
   var L = LOGIN; if (!L || L.dead) return;
@@ -2209,6 +2213,7 @@ function loginPoll(){
     }).catch(function(){ if (LOGIN === L) L.t = setTimeout(loginPoll, 3000); });
 }
 function loginStart(){
+  if (LOGIN && !LOGIN.dead) { loginSheet(); return; }
   loginStop();
   fetch('/api/web/login/start', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
     .then(function(r){ return r.json().then(function(j){ if (!r.ok) throw new Error(j.error || 'err'); return j; }); })
@@ -2220,7 +2225,15 @@ function loginStart(){
 document.addEventListener('visibilitychange', function(){ if (!document.hidden && LOGIN) { clearTimeout(LOGIN.t); loginPoll(); } });
 function boot(){
   applyTheme();
-  if (!ONLINE) { applyRecurring(); render(); maybeOnboard(); return; }
+  if (!ONLINE) {
+    applyRecurring(); render();
+    if (IN_TG) { maybeOnboard(); return; }
+    /* вне Telegram: если сервер умеет вход через бота, сразу предлагаем войти (окно можно закрыть) */
+    fetch('/api/web/login/available').then(function(r){ return r.json(); }).then(function(j){
+      if (j && j.ok) { GATE = true; render(); loginStart(); } else maybeOnboard();
+    }).catch(function(){ maybeOnboard(); });
+    return;
+  }
   $('#nav').style.display = 'none'; $('#fab').style.display = 'none';
   $('#app').innerHTML = '<div class="empty" style="padding-top:38vh;font-size:1.125rem">Загрузка…</div>';
   api('GET', '/api/state').then(function(r){
