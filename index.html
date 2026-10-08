@@ -264,6 +264,12 @@ body{font-weight:500}
 .brow .bm b{display:flex;justify-content:space-between;gap:.5rem;font-weight:800}
 .brow .bb{height:.4rem;border-radius:.4rem;background:var(--line);margin-top:.35rem;overflow:hidden}
 .brow .bb i{display:block;height:100%;border-radius:.4rem;background:var(--pink-d)}
+.cg[style*="--ch"] .ci{color:hsl(var(--ch) 80% 72%);background:hsl(var(--ch) 75% 55%/.28);border-radius:.625rem;box-shadow:0 0 12px hsl(var(--ch) 85% 60%/.38)}
+html[data-theme=pink] .cg[style*="--ch"] .ci,html[data-theme=mint] .cg[style*="--ch"] .ci,html[data-theme=lav] .cg[style*="--ch"] .ci,html[data-theme=sky] .cg[style*="--ch"] .ci{color:hsl(var(--ch) 65% 38%);box-shadow:none}
+.brow[style*="--ch"] .ci{color:hsl(var(--ch) 80% 72%);background:hsl(var(--ch) 75% 55%/.28);border-radius:.625rem;box-shadow:0 0 12px hsl(var(--ch) 85% 60%/.38)}
+.brow[style*="--ch"] .bb i{background:linear-gradient(90deg,hsl(var(--ch) 75% 55%),hsl(var(--ch) 85% 70%));box-shadow:0 0 8px hsl(var(--ch) 85% 60%/.55)}
+html[data-theme=pink] .brow[style*="--ch"] .ci,html[data-theme=mint] .brow[style*="--ch"] .ci,html[data-theme=lav] .brow[style*="--ch"] .ci,html[data-theme=sky] .brow[style*="--ch"] .ci{color:hsl(var(--ch) 65% 38%);box-shadow:none}
+html[data-theme=pink] .brow[style*="--ch"] .bb i,html[data-theme=mint] .brow[style*="--ch"] .bb i,html[data-theme=lav] .brow[style*="--ch"] .bb i,html[data-theme=sky] .brow[style*="--ch"] .bb i{box-shadow:none}
 .btot{display:flex;justify-content:space-between;padding:.7rem .1rem 0;font-weight:800;border-top:1px solid var(--line);margin-top:.3rem}
 .psub{margin-top:.4rem;font-size:.85rem;font-weight:700;color:var(--muted)}
 .rec .edpill,.edpill{padding:.45rem .9rem;border-radius:.8rem;background:var(--btn);color:#fff;border:0;font-size:.95rem;font-weight:800;letter-spacing:0;-webkit-font-smoothing:antialiased;box-shadow:0 0 .6rem rgba(162,132,247,.5)}
@@ -1184,7 +1190,7 @@ function openOp(catId){
   sheet('<h3>Новая операция</h3>' +
     '<div class="seg"><button class="on" data-act="optype" data-v="expense">Расход</button><button data-act="optype" data-v="income">Доход</button></div>' +
     '<div class="amtbox"><input id="f-amt" inputmode="decimal" placeholder="0" autocomplete="off"><span id="f-sym">'+SYM()+'</span></div>' + curRow() + recentChips() +
-    '<div id="f-cats"><label>Категория</label><div class="cgrid">' + S.cats.map(function(c){ return '<button class="cg '+(c.id === opCat ? 'on' : '')+'" data-act="opcat" data-id="'+c.id+'"><b>'+ci(c.emoji)+'</b>'+esc(c.name)+'</button>'; }).join('') + '<button class="cg add" data-act="opnewcat"><b>+</b>Своя</button></div></div>' +
+    '<div id="f-cats"><label>Категория</label><div class="cgrid">' + S.cats.map(function(c){ return '<button class="cg '+(c.id === opCat ? 'on' : '')+'" style="--ch:'+((S.cats.indexOf(c) * 47 + 20) % 360)+'" data-act="opcat" data-id="'+c.id+'"><b>'+ci(c.emoji)+'</b>'+esc(c.name)+'</button>'; }).join('') + '<button class="cg add" data-act="opnewcat"><b>+</b>Своя</button></div></div>' +
     '<label>Комментарий</label><input id="f-note" placeholder="Необязательно" autocomplete="off">' +
     '<label>Дата</label><div class="row2"><button class="chip '+(isCur() ? 'on' : '')+'" data-act="opdate" data-v="0">Сегодня</button><button class="chip" data-act="opdate" data-v="1">Вчера</button><input id="f-date" type="date" value="'+d+'"></div>' +
     '<button class="btn big" data-act="saveop">Сохранить</button>');
@@ -1972,7 +1978,7 @@ function openRecur(){
   recCat = S.cats[0] ? S.cats[0].id : '';
   sheet('<h3>Регулярный платёж</h3><label>Название</label><input id="r-name" placeholder="Например, Аренда" autocomplete="off">' +
     '<label>Сумма, '+SYM()+'</label><input id="r-amt" inputmode="decimal" placeholder="0" autocomplete="off">' +
-    '<label>Категория</label><div class="cgrid">' + S.cats.map(function(c){ return '<button class="cg '+(c.id === recCat ? 'on' : '')+'" data-act="reccat" data-id="'+c.id+'"><b>'+ci(c.emoji)+'</b>'+esc(c.name)+'</button>'; }).join('') + '</div>' +
+    '<label>Категория</label><div class="cgrid">' + S.cats.map(function(c){ return '<button class="cg '+(c.id === recCat ? 'on' : '')+'" style="--ch:'+((S.cats.indexOf(c) * 47 + 20) % 360)+'" data-act="reccat" data-id="'+c.id+'"><b>'+ci(c.emoji)+'</b>'+esc(c.name)+'</button>'; }).join('') + '</div>' +
     '<label>Числа месяца (1–28)</label><input id="r-day" inputmode="numeric" value="1" autocomplete="off">' +
     '<button class="btn big" data-act="saverec">Добавить</button>');
 }
@@ -2086,7 +2092,8 @@ function spentSheet(){
   if (!rows.length && !other) return sheet(h + '<div class="empty">В этом месяце трат пока нет</div>');
   h += rows.map(function(r){
     var pc = tot > 0 ? Math.max(2, Math.round(r.v / tot * 100)) : 0;
-    return '<div class="brow">' + ci(r.c.emoji) + '<div class="bm"><b><span>' + esc(r.c.name) + '</span><span>' + fmt(r.v) + '</span></b><div class="bb"><i style="width:' + pc + '%"></i></div>' +
+    var hue = (S.cats.indexOf(r.c) * 47 + 20) % 360;
+    return '<div class="brow" style="--ch:' + hue + '">' + ci(r.c.emoji) + '<div class="bm"><b><span>' + esc(r.c.name) + '</span><span>' + fmt(r.v) + '</span></b><div class="bb"><i style="width:' + pc + '%"></i></div>' +
       (r.c.limit > 0 ? '<div class="hi" style="font-size:.78rem;font-weight:600;margin-top:.25rem">' + (r.v > r.c.limit ? 'Сверх лимита на ' + fmt(r.v - r.c.limit) : 'Лимит ' + fmt(r.c.limit) + ', осталось ' + fmt(r.c.limit - r.v)) + '</div>' : '') + '</div></div>';
   }).join('');
   if (other > 0) h += '<div class="brow">' + ci('•') + '<div class="bm"><b><span>Без категории</span><span>' + fmt(other) + '</span></b></div></div>';
