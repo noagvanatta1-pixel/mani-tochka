@@ -79,6 +79,10 @@ db.exec(`
     id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, plan TEXT NOT NULL, amount INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS web_sessions (
+    token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at INTEGER NOT NULL, last_used INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS web_sessions_user ON web_sessions (user_id);
   CREATE TABLE IF NOT EXISTS images (
     user_id INTEGER NOT NULL, goal_id TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, goal_id)
@@ -89,6 +93,12 @@ for (const col of ['bills INTEGER NOT NULL DEFAULT 0', 'monthly INTEGER NOT NULL
 }
 
 const q = {
+  sessIns: db.prepare('INSERT INTO web_sessions (token_hash, user_id, created_at, last_used) VALUES (?, ?, ?, ?)'),
+  sessGet: db.prepare("SELECT s.user_id AS id, s.last_used AS last_used, COALESCE(u.first_name, '') AS first_name FROM web_sessions s LEFT JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?"),
+  sessTouch: db.prepare('UPDATE web_sessions SET last_used = ? WHERE token_hash = ?'),
+  sessDel: db.prepare('DELETE FROM web_sessions WHERE token_hash = ?'),
+  sessDelUser: db.prepare('DELETE FROM web_sessions WHERE user_id = ?'),
+  sessExpire: db.prepare('DELETE FROM web_sessions WHERE last_used < ?'),
   upsertUser: db.prepare(`INSERT INTO users (id, first_name, created_at, last_seen) VALUES (?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET first_name = excluded.first_name, last_seen = excluded.last_seen`),
   getState: db.prepare('SELECT rev, data FROM states WHERE user_id = ?'),
@@ -246,11 +256,57 @@ function authenticate(req) {
     if (Number.isSafeInteger(id) && id > 0) return { id, first_name: 'Dev' + id };
   }
   const h = String(req.headers.authorization || '');
+  if (h.startsWith('web ')) {
+    const u = webSessionUser(h.slice(4));
+    if (!u) throw httpError(401, 'unauthorized');
+    return u;
+  }
   if (!h.startsWith('tma ')) throw httpError(401, 'unauthorized');
   const r = verifyInitData(h.slice(4));
   if (!r) throw httpError(401, 'unauthorized');
   if (r.expired) throw httpError(401, 'expired');
   return r.user;
+}
+
+/* ---------- Вход через Telegram для версии с сайта (PWA) ----------
+   Сайт просит ссылку на бота, человек подтверждает вход в боте (там виден код с экрана),
+   сайт получает долгий ключ-сессию. Ключ хранится на сервере только в виде хеша. */
+const WEB_TTL = 120 * 86400000;   // сессия живёт 120 дней с последнего использования
+const LOGIN_TTL = 5 * 60000;      // ссылка для входа действует 5 минут
+const webLogins = new Map();      // публичный id -> { secretHash, code, created, state, uid, name }
+const loginHits = new Map();      // ip -> { n, reset }
+const sha256hex = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
+
+function webSessionUser(token) {
+  if (typeof token !== 'string' || !/^[0-9a-f]{64}$/.test(token)) return null;
+  const h = sha256hex(token), row = q.sessGet.get(h);
+  if (!row) return null;
+  const t = Date.now();
+  if (t - row.last_used > WEB_TTL) { q.sessDel.run(h); return null; }
+  if (t - row.last_used > 86400000) q.sessTouch.run(t, h);
+  return { id: row.id, first_name: String(row.first_name || '').slice(0, 64) };
+}
+function clientIp(req) {
+  const xf = String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return xf.length ? xf[xf.length - 1] : String(req.socket.remoteAddress || '');
+}
+function loginLimit(req, kind, max) {
+  const k = kind + ':' + clientIp(req), t = Date.now();
+  let r = loginHits.get(k);
+  if (!r || t > r.reset) { r = { n: 0, reset: t + 10 * 60000 }; loginHits.set(k, r); }
+  if (++r.n > max) throw httpError(429, 'too many requests');
+}
+function gcLogins() {
+  const t = Date.now();
+  for (const [id, e] of webLogins) if (t - e.created > LOGIN_TTL) webLogins.delete(id);
+  for (const [k, r] of loginHits) if (t > r.reset) loginHits.delete(k);
+}
+setInterval(() => { gcLogins(); try { q.sessExpire.run(Date.now() - WEB_TTL); } catch (_) {} }, 60000).unref();
+function liveLogin(id) {
+  const e = webLogins.get(String(id));
+  if (!e) return null;
+  if (Date.now() - e.created > LOGIN_TTL) { webLogins.delete(String(id)); return null; }
+  return e;
 }
 
 /* ---------- Вспомогательное ---------- */
@@ -475,9 +531,44 @@ async function handleApi(req, res, url) {
     if (id && YK_ON) await ykCheck(id).catch((e) => console.error('ЮKassa webhook:', e.message));
     return json(res, 200, { ok: true });
   }
+  if (url.pathname === '/api/web/login/start' && req.method === 'POST') {
+    if (!BOT_TOKEN || !BOT_NAME) throw httpError(503, 'login unavailable');
+    loginLimit(req, 'start', 20);
+    gcLogins();
+    if (webLogins.size >= 3000) throw httpError(429, 'too many requests');
+    const id = crypto.randomBytes(8).toString('hex'), secret = crypto.randomBytes(16).toString('hex');
+    const code = String(1000 + crypto.randomInt(9000));
+    webLogins.set(id, { secretHash: sha256hex(secret), code, created: Date.now(), state: 'pending', uid: 0, name: '' });
+    return json(res, 200, { id, secret, code, link: 'https://t.me/' + BOT_NAME + '?start=wl_' + id, ttl: LOGIN_TTL / 1000 });
+  }
+  if (url.pathname === '/api/web/login/poll' && req.method === 'POST') {
+    loginLimit(req, 'poll', 600);
+    const b = await readJson(req, 512);
+    const id = String(b && b.id || ''), e = liveLogin(id);
+    const given = Buffer.from(sha256hex(String(b && b.secret || ''))), want = e ? Buffer.from(e.secretHash) : null;
+    if (!e || given.length !== want.length || !crypto.timingSafeEqual(given, want)) return json(res, 200, { status: 'expired' });
+    if (e.state === 'pending') return json(res, 200, { status: 'pending' });
+    webLogins.delete(id);
+    if (e.state !== 'ok' || !(e.uid > 0)) return json(res, 200, { status: 'denied' });
+    const token = crypto.randomBytes(32).toString('hex'), t = Date.now();
+    q.upsertUser.run(e.uid, e.name, t, t);
+    q.sessIns.run(sha256hex(token), e.uid, t, t);
+    return json(res, 200, { status: 'ok', token, user: { id: e.uid, first_name: e.name } });
+  }
+  if (DEV && url.pathname === '/api/dev/update' && req.method === 'POST') {
+    /* только для проверок: имитирует сообщение от Telegram */
+    handleUpdate(await readJson(req, 8192)).catch(() => {});
+    return json(res, 200, { ok: true });
+  }
   const user = authenticate(req);
   rateLimit(user.id);
   const p = url.pathname, m = req.method;
+
+  if (p === '/api/web/logout' && m === 'POST') {
+    const h = String(req.headers.authorization || '');
+    if (h.startsWith('web ')) q.sessDel.run(sha256hex(h.slice(4)));
+    return json(res, 200, { ok: true });
+  }
 
   if (p === '/api/pay/stars' && m === 'POST') {
     const body = await readJson(req, 1024);
@@ -634,7 +725,7 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/account' && m === 'DELETE') {
     leaveFamily(user.id);
-    tx(() => { q.delImages.run(user.id); q.delState.run(user.id); q.delPrefs.run(user.id); q.delRefs.run(user.id, user.id); q.delRefCode.run(user.id); q.delUser.run(user.id); });
+    tx(() => { q.delImages.run(user.id); q.delState.run(user.id); q.delPrefs.run(user.id); q.delRefs.run(user.id, user.id); q.delRefCode.run(user.id); q.sessDelUser.run(user.id); q.delUser.run(user.id); });
     seen.delete(user.id);
     return json(res, 200, { ok: true });
   }
@@ -852,6 +943,18 @@ async function sendPlanInvoice(chatId, uid, plan, method) {
 }
 async function handleCallback(cb) {
   const parts = String(cb.data || '').split('|');
+  if (parts[0] === 'wl' && cb.message && cb.from) {
+    const e = liveLogin(parts[2]);
+    if (!e || e.state !== 'pending') {
+      await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Ссылка устарела. Нажмите «Войти» в приложении ещё раз.' });
+      return;
+    }
+    if (parts[1] === 'y') { e.state = 'ok'; e.uid = cb.from.id; e.name = String(cb.from.first_name || '').slice(0, 64); }
+    else e.state = 'denied';
+    await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
+    await tgApi('editMessageText', { chat_id: cb.message.chat.id, message_id: cb.message.message_id, text: parts[1] === 'y' ? '✅ Вход подтверждён. Возвращайтесь в приложение.' : 'Вход отменён.' });
+    return;
+  }
   if (parts[0] === 'pl' && cb.message) {
     await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
     await tgApi('sendMessage', { chat_id: cb.message.chat.id, ...plansMessage(cb.from.id) });
@@ -959,6 +1062,16 @@ async function handleUpdate(u) {
   if (/^\/(help|support)\b/.test(text)) {
     const sup = SUPPORT_TG ? `\n\nПоддержка: @${SUPPORT_TG}` : '';
     return tgApi('sendMessage', { chat_id: m.chat.id, text: 'Быстрая запись трат: отправьте «кофе 250» или «такси 300». Доход: «+5000 зарплата».' + sup, reply_markup: openButton() });
+  }
+  const wl = /^\/start\s+wl_([0-9a-f]{16})$/.exec(text);
+  if (wl) {
+    const e = liveLogin(wl[1]);
+    if (!e || e.state !== 'pending') return tgApi('sendMessage', { chat_id: m.chat.id, text: 'Эта ссылка для входа устарела. Нажмите «Войти» в приложении ещё раз.' });
+    return tgApi('sendMessage', {
+      chat_id: m.chat.id,
+      text: `Вход в Копилку на другом устройстве.\n\nКод: ${e.code}\n\nЕсли этот код показан на экране, где вы входите, нажмите «Это я». Если вы ничего не открывали, нажмите «Не я».`,
+      reply_markup: { inline_keyboard: [[{ text: '✅ Это я, войти', callback_data: 'wl|y|' + wl[1] }, { text: '❌ Не я', callback_data: 'wl|n|' + wl[1] }]] },
+    });
   }
   if (/^\/(plans|buy|subscribe)\b/.test(text)) return tgApi('sendMessage', { chat_id: m.chat.id, ...plansMessage(m.from.id) });
   if (!text.startsWith('/') && await handleQuick(m, text)) return;

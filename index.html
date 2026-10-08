@@ -429,7 +429,12 @@ if (tg) {
 }
 var tgName = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) || '';
 var tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null;
-var ONLINE = !!(tg && tg.initData && tgUser && tgUser.id);   // внутри Telegram -> данные хранятся на сервере
+var IN_TG = !!(tg && tg.initData && tgUser && tgUser.id);
+/* вне Telegram (сайт на экране «Домой») вход идёт через бота: ключ сессии лежит на устройстве */
+var WS = null;
+if (!IN_TG) { try { WS = JSON.parse(localStorage.getItem('kp_web') || 'null'); } catch(e){} if (!(WS && typeof WS.token === 'string' && WS.token && WS.id > 0)) WS = null; }
+if (WS) { tgUser = {id: WS.id, first_name: WS.name || ''}; tgName = WS.name || ''; }
+var ONLINE = IN_TG || !!WS;   // в Telegram или после входа -> данные хранятся на сервере
 function haptic(kind){ try { tg.HapticFeedback.impactOccurred(kind||'light'); } catch(e){} }
 
 /* ---------- Helpers ---------- */
@@ -588,11 +593,11 @@ function cacheLocal(sc){
   catch(e){ toast('Не удалось сохранить на устройстве: не хватает места'); }
 }
 function api(method, path, body){
-  var opt = {method: method, headers: {'Authorization': 'tma ' + (tg ? tg.initData : ''), 'Content-Type': 'application/json'}};
+  var opt = {method: method, headers: {'Authorization': WS ? 'web ' + WS.token : 'tma ' + (tg ? tg.initData : ''), 'Content-Type': 'application/json'}};
   if (body != null) opt.body = JSON.stringify(body);
   return fetch(path, opt).then(function(r){
     return r.json().catch(function(){ return {}; }).then(function(j){
-      if (!r.ok) { var e = new Error(j.error || ('HTTP ' + r.status)); e.status = r.status; e.data = j; throw e; }
+      if (!r.ok) { var e = new Error(j.error || ('HTTP ' + r.status)); e.status = r.status; e.data = j; if (r.status === 401 && WS) webForget(true); throw e; }
       return j;
     });
   });
@@ -717,12 +722,13 @@ function sheet(html){
   fmtAllFields(el);
 }
 function closeSheet(){
+  if (typeof LOGIN !== 'undefined' && LOGIN) loginStop();
   var el = $('#sheet'); el.classList.remove('on');
   el.style.top = ''; el.style.height = ''; el.style.bottom = '';
   var a = document.activeElement; if (a && a.blur && a !== document.body) a.blur();
 }
 function confirmBox(msg, cb){
-  if (tg && tg.showConfirm) { try { tg.showConfirm(msg, function(ok){ if (ok) cb(); }); return; } catch(e){} }
+  if (IN_TG && tg.showConfirm) { try { tg.showConfirm(msg, function(ok){ if (ok) cb(); }); return; } catch(e){} }
   if (window.confirm(msg)) cb();
 }
 
@@ -1113,10 +1119,11 @@ function vAn(){
 }
 
 function accountCard(){
-  if (!ONLINE) return '<div class="card set"><label style="margin-top:0">Режим без аккаунта</label><div class="hi" style="margin:0 0.25rem">Данные хранятся только на этом устройстве.</div></div>';
+  if (!ONLINE) return '<div class="card set"><label style="margin-top:0">Режим без аккаунта</label><div class="hi" style="margin:0 0.25rem 0.875rem">Данные хранятся только на этом устройстве.</div><button class="btn ghost" data-act="weblogin">Войти через Telegram</button></div>';
   var st = syncState === 'ok' ? '☁️ Данные сохраняются на сервере' : (syncState === 'offline' ? '⚠️ Нет связи с сервером — сохраню, как только появится' : 'Подключаюсь…');
   return '<div class="card set"><label style="margin-top:0">Аккаунт</label><div class="hi" style="margin:0 0.25rem 0.875rem"><b style="color:var(--ink)">'+esc(tgUser.first_name || 'Вы')+'</b><br>'+st+'</div>' +
     (BOT ? '<button class="btn ghost" data-act="invite">'+ic('plus',22)+' Позвать друзей</button>' : '') +
+    (WS ? '<button class="btn ghost" style="margin-top:0.625rem" data-act="weblogout">Выйти на этом устройстве</button>' : '') +
     '<button class="btn danger" style="margin-top:0.625rem" data-act="delaccount">Удалить мои данные с сервера</button></div>';
 }
 function ownCached(){ try { return localStorage.getItem('kp_own') === '1'; } catch (e) { return false; } }
@@ -1488,7 +1495,7 @@ var ACT = {
   invite: function(){
     var link = 'https://t.me/' + BOT, text = 'Считаю расходы и коплю на цели в Копилке. Заходи!' + (REF && REF.code ? ' Мой код друга: ' + REF.code + ' (введи его в Настройках — получишь бонус).' : '');
     var url = 'https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text);
-    if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank');
+    if (IN_TG && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank');
   },
   delaccount: function(){
     confirmBox('Удалить все ваши данные с сервера? Это нельзя отменить.', function(){
@@ -1545,6 +1552,13 @@ var ACT = {
   },
   dismissal: function(d){ try { localStorage.setItem('kp_dis', d.sig); } catch (e) {} render(); },
   openbot: function(){ openTg('https://t.me/' + (BOT || 'TheSavedMoney_bot')); },
+  weblogin: function(){ loginStart(); },
+  weblogout: function(){
+    confirmBox('Выйти из аккаунта на этом устройстве? Данные останутся на сервере.', function(){
+      api('POST', '/api/web/logout', {}).catch(function(){}).then(function(){ webForget(false); });
+    });
+  },
+  loginopen: function(){ if (LOGIN && LOGIN.link) openTg(LOGIN.link); },
   stats: function(){ api('GET', '/api/admin/stats').then(statsSheet).catch(function(){ toast('Не удалось загрузить статистику'); }); },
   theme: function(d){ P().theme = d.v; markDirty('me'); haptic(); render(); },
   scale: function(d){ P().scale = d.v; markDirty('me'); haptic(); render(); },
@@ -1565,7 +1579,7 @@ var ACT = {
     var f = FAM && FAM.family; if (!f) return;
     var link = 'https://t.me/' + (BOT || ''), text = 'Давай вести семейный бюджет в Копилке 💞 Открой бота, вкладка «Семья ＋» → введи код: ' + f.code;
     var url = 'https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text);
-    if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank');
+    if (IN_TG && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank');
   },
   famleave: function(){
     confirmBox('Выйти из семьи? Общие данные останутся у партнёра, ваши личные не пострадают.', function(){
@@ -1757,8 +1771,8 @@ var REF = null, recCat = '';
 var PLAN = null;
 function locked(){ return !!(PLAN && PLAN.locked); }
 function gate(what){ if (!locked()) return false; openPaywall(what); return true; }
-function openLink(u){ try { if (tg && tg.openLink) { tg.openLink(u); return; } } catch(e){} window.open(u, '_blank'); }
-function openTg(u){ try { if (tg && tg.openTelegramLink) { tg.openTelegramLink(u); return; } } catch(e){} window.open(u, '_blank'); }
+function openLink(u){ try { if (IN_TG && tg.openLink) { tg.openLink(u); return; } } catch(e){} window.open(u, '_blank'); }
+function openTg(u){ try { if (IN_TG && tg.openTelegramLink) { tg.openTelegramLink(u); return; } } catch(e){} window.open(u, '_blank'); }
 function dmy(ts){ var d = new Date(ts); return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear(); }
 var PAYM = '';
 function payMethod(){ if (!PLAN) return ''; if (PAYM === 'card' && PLAN.card) return 'card'; if (PAYM === 'sbp' && PLAN.sbp) return 'sbp'; if (PAYM === 'stars' && PLAN.stars) return 'stars'; return PLAN.card ? 'card' : (PLAN.sbp ? 'sbp' : (PLAN.stars ? 'stars' : '')); }
@@ -1846,14 +1860,14 @@ function payInvoice(plan, method){
   if (method === 'sbp') {
     api('POST', '/api/pay/sbp', {plan: plan}).then(function(r){
       PAY_WAIT = true;
-      if (tg && tg.openLink) tg.openLink(r.url); else window.open(r.url, '_blank');
+      if (IN_TG && tg.openLink) tg.openLink(r.url); else window.open(r.url, '_blank');
       toast('Оплатите на странице ЮKassa и вернитесь сюда');
       setTimeout(function(){ refreshPlan(40, true); }, 8000);
     }).catch(function(){ toast('Не удалось создать платёж. Попробуйте позже'); });
     return;
   }
   api('POST', method === 'card' ? '/api/pay/card' : '/api/pay/stars', {plan: plan}).then(function(r){
-    if (tg && tg.openInvoice) {
+    if (IN_TG && tg.openInvoice) {
       tg.openInvoice(r.link, function(st){
         if (st === 'paid') { toast('Оплата прошла, включаем подписку…'); setTimeout(function(){ refreshPlan(6); }, 1200); }
         else if (st === 'failed') toast('Оплата не прошла');
@@ -1889,8 +1903,8 @@ function openPaywall(what){
   sheet('<h3>Нужна подписка</h3><div class="hi" style="margin:.2rem .25rem .9rem;font-weight:600">' + esc(what || 'Эта функция') + ' доступна по подписке. Учёт расходов и одна цель остаются бесплатными.</div>' + priceBtns() + '<div class="hi" style="margin:.8rem .25rem 0;font-size:.8rem;font-weight:600">Без автопродления: когда срок закончится, решаете вы.</div>');
 }
 function webBar(){
-  if (tg && tg.initData) return '';
-  return '<div class="webbar" data-act="openbot"><div><b>Откройте в Telegram</b>Так сохранятся данные на всех устройствах и заработает оплата. Здесь всё хранится только в этом браузере.</div><span>Открыть</span></div>';
+  if (IN_TG || ONLINE) return '';
+  return '<div class="webbar" data-act="weblogin"><div><b>Войдите через Telegram</b>Так сохранятся данные на всех устройствах и заработает оплата. Сейчас всё хранится только в этом браузере.</div><span>Войти</span></div>';
 }
 function trialBar(){
   if (!ONLINE || !PLAN || !PLAN.paywall || PLAN.status !== 'trial' || PLAN.daysLeft > 3) return '';
@@ -2163,6 +2177,47 @@ function loadExtras(){
   api('GET', '/api/rates').then(function(r){ if (r && r.rates) { RATES = r.rates; if ($('#f-fx')) updFx(); } }).catch(function(){});
   api('GET', '/api/ref').then(function(r){ REF = r; if (TAB === 'prof') render(); }).catch(function(){});
 }
+/* ---------- Вход через Telegram вне Telegram ---------- */
+var LOGIN = null;
+function webForget(reload){
+  try { localStorage.removeItem('kp_web'); } catch(e){}
+  WS = null;
+  if (reload) { toast('Нужно войти заново'); setTimeout(function(){ location.reload(); }, 900); } else location.reload();
+}
+function loginStop(){ if (LOGIN) { clearTimeout(LOGIN.t); LOGIN.dead = true; } LOGIN = null; }
+function loginSheet(st){
+  var L = LOGIN; if (!L) return;
+  var body = st === 'denied' ? '<div class="hi" style="margin:.2rem .25rem">Вход отменён в Telegram.</div>' :
+    st === 'expired' ? '<div class="hi" style="margin:.2rem .25rem">Время вышло. Нажмите «Войти» ещё раз.</div>' :
+    '<div class="hi" style="margin:.2rem .25rem .6rem;font-weight:600">1. Нажмите «Открыть Telegram».<br>2. В боте сверьте код и нажмите «Это я».<br>3. Вернитесь сюда: вход произойдёт сам.</div>' +
+    '<div id="lcode" style="text-align:center;font-size:2.6rem;font-weight:800;letter-spacing:.3rem;margin:.6rem 0 .2rem">' + esc(L.code) + '</div>' +
+    '<div class="hi" style="text-align:center;margin:0 0 .6rem;font-size:.85rem;font-weight:600">Этот код должен совпасть с кодом в боте</div>' +
+    '<button class="btn big" data-act="loginopen">Открыть Telegram</button>';
+  sheet('<h3>Вход через Telegram</h3>' + body);
+}
+function loginPoll(){
+  var L = LOGIN; if (!L || L.dead) return;
+  fetch('/api/web/login/poll', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: L.id, secret: L.secret})})
+    .then(function(r){ return r.json(); }).then(function(r){
+      if (!LOGIN || LOGIN !== L) return;
+      if (r.status === 'ok' && r.token && r.user) {
+        try { localStorage.setItem('kp_web', JSON.stringify({token: r.token, id: r.user.id, name: r.user.first_name || ''})); } catch(e){}
+        loginStop(); toast('Вход выполнен'); setTimeout(function(){ location.reload(); }, 500); return;
+      }
+      if (r.status === 'denied' || r.status === 'expired') { loginSheet(r.status); loginStop(); return; }
+      L.t = setTimeout(loginPoll, 2000);
+    }).catch(function(){ if (LOGIN === L) L.t = setTimeout(loginPoll, 3000); });
+}
+function loginStart(){
+  loginStop();
+  fetch('/api/web/login/start', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
+    .then(function(r){ return r.json().then(function(j){ if (!r.ok) throw new Error(j.error || 'err'); return j; }); })
+    .then(function(r){
+      LOGIN = {id: r.id, secret: r.secret, code: r.code, link: r.link, dead: false, t: 0};
+      loginSheet(); loginPoll();
+    }).catch(function(){ toast('Вход сейчас недоступен. Попробуйте позже'); });
+}
+document.addEventListener('visibilitychange', function(){ if (!document.hidden && LOGIN) { clearTimeout(LOGIN.t); loginPoll(); } });
 function boot(){
   applyTheme();
   if (!ONLINE) { applyRecurring(); render(); maybeOnboard(); return; }
