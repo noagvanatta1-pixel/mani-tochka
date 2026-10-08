@@ -651,6 +651,17 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(INDEX_FILE));
     }
+    if (req.method === 'GET' && (url.pathname === '/manifest.webmanifest' || url.pathname === '/sw.js' || /^\/pwa\/[a-z0-9-]+\.png$/.test(url.pathname))) {
+      /* файлы установки на экран «Домой» (PWA): манифест, service worker, иконки */
+      const name = url.pathname === '/sw.js' ? 'sw.js' : url.pathname === '/manifest.webmanifest' ? 'manifest.webmanifest' : url.pathname.slice(5);
+      const f = path.join(__dirname, 'pwa', name);
+      if (!fs.existsSync(f)) throw httpError(404, 'not found');
+      const type = name.endsWith('.png') ? 'image/png' : name.endsWith('.js') ? 'application/javascript; charset=utf-8' : 'application/manifest+json; charset=utf-8';
+      const headers = { 'Content-Type': type, 'Cache-Control': name.endsWith('.png') ? 'public, max-age=86400' : 'no-cache' };
+      if (name === 'sw.js') headers['Service-Worker-Allowed'] = '/';
+      res.writeHead(200, headers);
+      return res.end(fs.readFileSync(f));
+    }
     if (req.method === 'POST' && url.pathname === '/api/pay/webhook') {
       /* Платёжный сервис присылает {"user_id": 123, "days": 30}; в адресе или заголовке x-secret — PAY_SECRET */
       const given = Buffer.from(String(url.searchParams.get('secret') || req.headers['x-secret'] || ''));
