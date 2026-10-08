@@ -1558,7 +1558,6 @@ var ACT = {
       api('POST', '/api/web/logout', {}).catch(function(){}).then(function(){ webForget(false); });
     });
   },
-  loginopen: function(){ if (LOGIN && LOGIN.link) openTg(LOGIN.link); },
   stats: function(){ api('GET', '/api/admin/stats').then(statsSheet).catch(function(){ toast('Не удалось загрузить статистику'); }); },
   theme: function(d){ P().theme = d.v; markDirty('me'); haptic(); render(); },
   scale: function(d){ P().scale = d.v; markDirty('me'); haptic(); render(); },
@@ -2181,7 +2180,7 @@ function loadExtras(){
 /* ---------- Вход через Telegram вне Telegram ---------- */
 var LOGIN = null;
 var GATE = false;   // вне Telegram без входа: пользоваться можно только после входа
-var OPEN_OK = {weblogin: 1, loginopen: 1, openbot: 1, opensettings: 1, dismissal: 1, legal: 1, support: 1};
+var OPEN_OK = {weblogin: 1, openbot: 1, opensettings: 1, dismissal: 1, legal: 1, support: 1};
 function webForget(reload){
   try { localStorage.removeItem('kp_web'); } catch(e){}
   WS = null;
@@ -2193,10 +2192,8 @@ function loginSheet(st){
   var body = st === 'denied' ? '<div class="hi" style="margin:.2rem .25rem">Вход отменён в Telegram.</div>' :
     st === 'expired' ? '<div class="hi" style="margin:.2rem .25rem">Время вышло. Нажмите «Войти» ещё раз.</div>' :
     (GATE ? '<div class="hi" style="margin:.2rem .25rem .8rem">Чтобы пользоваться Копилкой, войдите через Telegram: так ваши данные сохранятся и не пропадут.</div>' : '') +
-    '<div class="hi" style="margin:.2rem .25rem .6rem;font-weight:600">1. Нажмите «Открыть Telegram».<br>2. В боте сверьте код и нажмите «Это я».<br>3. Вернитесь сюда: вход произойдёт сам.</div>' +
-    '<div id="lcode" style="text-align:center;font-size:2.6rem;font-weight:800;letter-spacing:.3rem;margin:.6rem 0 .2rem">' + esc(L.code) + '</div>' +
-    '<div class="hi" style="text-align:center;margin:0 0 .6rem;font-size:.85rem;font-weight:600">Этот код должен совпасть с кодом в боте</div>' +
-    '<button class="btn big" data-act="loginopen">Открыть Telegram</button>';
+    '<div class="hi" style="margin:.2rem .25rem .6rem;font-weight:600">1. Нажмите «Открыть Telegram».<br>2. В боте нажмите «Подтвердить вход».<br>3. Вернитесь сюда: вход произойдёт сам.</div>' +
+    '<a class="btn big" href="' + esc(L.link) + '" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Открыть Telegram</a>';
   sheet('<h3>Войдите через Telegram</h3>' + body);
 }
 function loginPoll(){
@@ -2218,7 +2215,7 @@ function loginStart(){
   fetch('/api/web/login/start', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
     .then(function(r){ return r.json().then(function(j){ if (!r.ok) throw new Error(j.error || 'err'); return j; }); })
     .then(function(r){
-      LOGIN = {id: r.id, secret: r.secret, code: r.code, link: r.link, dead: false, t: 0};
+      LOGIN = {id: r.id, secret: r.secret, link: r.link, dead: false, t: 0};
       loginSheet(); loginPoll();
     }).catch(function(){ toast('Вход сейчас недоступен. Попробуйте позже'); });
 }

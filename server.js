@@ -273,7 +273,7 @@ function authenticate(req) {
    сайт получает долгий ключ-сессию. Ключ хранится на сервере только в виде хеша. */
 const WEB_TTL = 120 * 86400000;   // сессия живёт 120 дней с последнего использования
 const LOGIN_TTL = 5 * 60000;      // ссылка для входа действует 5 минут
-const webLogins = new Map();      // публичный id -> { secretHash, code, created, state, uid, name }
+const webLogins = new Map();      // публичный id -> { secretHash, created, state, uid, name }
 const loginHits = new Map();      // ip -> { n, reset }
 const sha256hex = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
 
@@ -538,9 +538,8 @@ async function handleApi(req, res, url) {
     gcLogins();
     if (webLogins.size >= 3000) throw httpError(429, 'too many requests');
     const id = crypto.randomBytes(8).toString('hex'), secret = crypto.randomBytes(16).toString('hex');
-    const code = String(1000 + crypto.randomInt(9000));
-    webLogins.set(id, { secretHash: sha256hex(secret), code, created: Date.now(), state: 'pending', uid: 0, name: '' });
-    return json(res, 200, { id, secret, code, link: 'https://t.me/' + BOT_NAME + '?start=wl_' + id, ttl: LOGIN_TTL / 1000 });
+    webLogins.set(id, { secretHash: sha256hex(secret), created: Date.now(), state: 'pending', uid: 0, name: '' });
+    return json(res, 200, { id, secret, link: 'https://t.me/' + BOT_NAME + '?start=wl_' + id, ttl: LOGIN_TTL / 1000 });
   }
   if (url.pathname === '/api/web/login/poll' && req.method === 'POST') {
     loginLimit(req, 'poll', 600);
@@ -1070,8 +1069,8 @@ async function handleUpdate(u) {
     if (!e || e.state !== 'pending') return tgApi('sendMessage', { chat_id: m.chat.id, text: 'Эта ссылка для входа устарела. Нажмите «Войти» в приложении ещё раз.' });
     return tgApi('sendMessage', {
       chat_id: m.chat.id,
-      text: `Вход в Копилку на другом устройстве.\n\nКод: ${e.code}\n\nЕсли этот код показан на экране, где вы входите, нажмите «Это я». Если вы ничего не открывали, нажмите «Не я».`,
-      reply_markup: { inline_keyboard: [[{ text: '✅ Это я, войти', callback_data: 'wl|y|' + wl[1] }, { text: '❌ Не я', callback_data: 'wl|n|' + wl[1] }]] },
+      text: 'Вход в Копилку с сайта.\n\nЕсли вы только что нажали «Войти» в Копилке, подтвердите вход. Если вы ничего не нажимали, нажмите «Не я»: так вход не откроется.',
+      reply_markup: { inline_keyboard: [[{ text: '✅ Подтвердить вход', callback_data: 'wl|y|' + wl[1] }, { text: '❌ Не я', callback_data: 'wl|n|' + wl[1] }]] },
     });
   }
   if (/^\/(plans|buy|subscribe)\b/.test(text)) return tgApi('sendMessage', { chat_id: m.chat.id, ...plansMessage(m.from.id) });
