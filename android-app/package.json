@@ -1,0 +1,11 @@
+{
+  "name": "kopilka-android",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Android-обёртка Копилки для RuStore (Capacitor, загружает https://kopilka.website)",
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/cli": "^6.2.0",
+    "@capacitor/core": "^6.2.0"
+  }
+}

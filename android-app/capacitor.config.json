@@ -1,0 +1,14 @@
+{
+  "appId": "website.kopilka.app",
+  "appName": "Копилка",
+  "webDir": "www",
+  "backgroundColor": "#120d22",
+  "server": {
+    "url": "https://kopilka.website",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

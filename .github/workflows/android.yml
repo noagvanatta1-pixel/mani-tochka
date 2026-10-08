@@ -1,0 +1,83 @@
+name: Android-приложение (RuStore)
+
+# Запуск вручную: вкладка Actions → «Android-приложение (RuStore)» → Run workflow.
+# Нужен секрет KS_PASS (пароль ключа подписи): Settings → Secrets and variables → Actions → New repository secret.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Ключ подписи
+        env:
+          KS_PASS: ${{ secrets.KS_PASS }}
+        run: |
+          if [ -z "$KS_PASS" ] || [ ${#KS_PASS} -lt 8 ]; then
+            echo "::error::Нет секрета KS_PASS (минимум 8 символов). Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          mkdir -p android-app/keystore
+          if [ ! -f android-app/keystore/kopilka.jks ]; then
+            keytool -genkeypair -storetype PKCS12 -keystore android-app/keystore/kopilka.jks -alias kopilka \
+              -keyalg RSA -keysize 4096 -validity 36500 -storepass "$KS_PASS" -keypass "$KS_PASS" \
+              -dname "CN=Kopilka, O=Kopilka, C=RU"
+            git config user.name "kopilka-ci"
+            git config user.email "ci@users.noreply.github.com"
+            git add android-app/keystore/kopilka.jks
+            git commit -m "Ключ подписи Android-приложения (защищён паролем KS_PASS)"
+            git push
+          fi
+
+      - name: Установка Capacitor
+        working-directory: android-app
+        run: npm install
+
+      - name: Создание Android-проекта
+        working-directory: android-app
+        run: npx cap add android
+
+      - name: Настройка проекта (версия, подпись, иконки)
+        working-directory: android-app
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
+        run: python3 patch_android.py
+
+      - name: Синхронизация
+        working-directory: android-app
+        run: npx cap sync android
+
+      - name: Сборка APK и AAB
+        working-directory: android-app/android
+        env:
+          KS_FILE: ${{ github.workspace }}/android-app/keystore/kopilka.jks
+          KS_PASS: ${{ secrets.KS_PASS }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
+
+      - name: Публикация сборки
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "android-${{ github.run_number }}" \
+            --title "Копилка для Android 1.0.${{ github.run_number }}" \
+            --notes "Подписанная сборка для RuStore: APK для установки и загрузки, AAB для магазинов." \
+            "android-app/android/app/build/outputs/apk/release/app-release.apk#Kopilka.apk" \
+            "android-app/android/app/build/outputs/bundle/release/app-release.aab#Kopilka.aab"
