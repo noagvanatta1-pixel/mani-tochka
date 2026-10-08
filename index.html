@@ -474,6 +474,7 @@ var I = {
   target:'<path d="M6 21V4"/><path d="M6 4h11l-2.5 3.8L17 11.5H6"/>',
   chart:'<path d="M5 20v-7M12 20V5M19 20v-10"/>',
   clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  logout:'<path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M16 8l4 4-4 4M20 12H10"/>',
   gear:'<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
   pencil:'<path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/>',
@@ -1123,8 +1124,7 @@ function accountCard(){
   var st = syncState === 'ok' ? '☁️ Данные сохраняются на сервере' : (syncState === 'offline' ? '⚠️ Нет связи с сервером — сохраню, как только появится' : 'Подключаюсь…');
   return '<div class="card set"><label style="margin-top:0">Аккаунт</label><div class="hi" style="margin:0 0.25rem 0.875rem"><b style="color:var(--ink)">'+esc(tgUser.first_name || 'Вы')+'</b><br>'+st+'</div>' +
     (BOT ? '<button class="btn ghost" data-act="invite">'+ic('plus',22)+' Позвать друзей</button>' : '') +
-    (WS ? '<button class="btn ghost" style="margin-top:0.625rem" data-act="weblogout">Выйти на этом устройстве</button>' : '') +
-    '<button class="btn danger" style="margin-top:0.625rem" data-act="delaccount">Удалить мои данные с сервера</button></div>';
+    (WS ? '<button class="btn ghost" style="margin-top:0.625rem" data-act="weblogout">'+ic('logout',22)+' Выйти из аккаунта</button>' : '') + '</div>';
 }
 function ownCached(){ try { return localStorage.getItem('kp_own') === '1'; } catch (e) { return false; } }
 function vProf(){
@@ -1153,7 +1153,7 @@ function vSet(){
     '<div class="hi" style="margin:.4rem .25rem 0;font-size:.8rem;font-weight:600">Бюджет считается по «от», чтобы хватало и в слабый месяц. «До» — необязательно.</div>' +
     '<button class="btn big" data-act="savesettings">Сохранить</button></div>' +
     themeCard() + currencyCard() + remindCard() + exportCard() +
-    '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button></div>';
+    '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button>' + (ONLINE ? '<button class="btn danger" style="margin-top:0.625rem" data-act="delaccount">Удалить мои данные с сервера</button>' : '') + '</div>';
 }
 
 function render(){
@@ -1554,7 +1554,7 @@ var ACT = {
   openbot: function(){ openTg('https://t.me/' + (BOT || 'TheSavedMoney_bot')); },
   weblogin: function(){ loginStart(); },
   weblogout: function(){
-    confirmBox('Выйти из аккаунта на этом устройстве? Данные останутся на сервере.', function(){
+    confirmBox('Выйти из аккаунта на этом устройстве? Ваши данные и подписка останутся на сервере, при входе всё вернётся.', function(){
       api('POST', '/api/web/logout', {}).catch(function(){}).then(function(){ webForget(false); });
     });
   },
