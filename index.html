@@ -1830,6 +1830,7 @@ function statsSheet(r){
     '<label style="margin-top:0">Люди</label>' + kv('Всего (без тебя)', r.users) + kv('Новых за сутки / 7 дней / 30 дней', r.new1 + ' / ' + r.new7 + ' / ' + r.new30) +
     kv('Заходили за сутки / 7 дней', r.active1 + ' / ' + r.active7) + kv('Записали хотя бы одну операцию', r.withOps) +
     kv('Вернулись через 3+ дня', r.back3 == null ? '—' : r.back3 + '%') + kv('Вернулись через 7+ дней', r.back7 == null ? '—' : r.back7 + '%') +
+    ((r.bySrc && r.bySrc.length) ? '<label>Откуда пришли (нажали бота по ссылке)</label>' + r.bySrc.map(function(x){ return kv(x.src, x.n + ' (открыли приложение: ' + x.opened + ')'); }).join('') : '') +
     '<label>Новые люди по дням</label><div style="display:flex;align-items:flex-end;gap:.15rem;height:5.5rem;padding:.25rem 0">' + bars + '</div>' +
     '<label>Деньги</label>' + kv('На пробном периоде', r.trial) + kv('Подписка активна', r.premium) + kv('Платили хоть раз', r.payers + ' (' + r.conv + '%)') +
     kv('Платежей: месяц / год / навсегда', r.byPlan.month + ' / ' + r.byPlan.year + ' / ' + r.byPlan.life) +

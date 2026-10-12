@@ -48,6 +48,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY, first_name TEXT, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS sources (
+    user_id INTEGER PRIMARY KEY, src TEXT NOT NULL, created_at INTEGER NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS states (
     user_id INTEGER PRIMARY KEY, rev INTEGER NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL
   );
@@ -101,6 +104,7 @@ const q = {
   sessExpire: db.prepare('DELETE FROM web_sessions WHERE last_used < ?'),
   upsertUser: db.prepare(`INSERT INTO users (id, first_name, created_at, last_seen) VALUES (?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET first_name = excluded.first_name, last_seen = excluded.last_seen`),
+  srcSet: db.prepare('INSERT OR IGNORE INTO sources (user_id, src, created_at) VALUES (?, ?, ?)'),
   getState: db.prepare('SELECT rev, data FROM states WHERE user_id = ?'),
   putState: db.prepare(`INSERT INTO states (user_id, rev, data, updated_at) VALUES (?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET rev = excluded.rev, data = excluded.data, updated_at = excluded.updated_at`),
@@ -437,6 +441,8 @@ function ownerStats() {
   for (const r of db.prepare('SELECT user_id, data FROM states WHERE user_id != ?').all(OWNER_ID)) {
     try { const d = JSON.parse(r.data); if (d && Array.isArray(d.ops) && d.ops.length) withOps++; } catch (e) { /* ignore */ }
   }
+  const bySrc = db.prepare(`SELECT s.src AS src, COUNT(*) AS n, COUNT(u.id) AS opened FROM sources s LEFT JOIN users u ON u.id = s.user_id
+    WHERE s.user_id != ? GROUP BY s.src ORDER BY n DESC`).all(OWNER_ID).map((r) => ({ src: r.src, n: r.n, opened: r.opened }));
   const old3 = users.filter((u) => now - u.created_at >= 3 * DAY), old7 = users.filter((u) => now - u.created_at >= 7 * DAY);
   const back = (list, d) => list.filter((u) => u.last_seen - u.created_at >= d * DAY).length;
   const payers = new Set(pays.map((p) => p.uid));
@@ -449,7 +455,7 @@ function ownerStats() {
   return {
     users: users.length, new1: cnt((u) => now - u.created_at < DAY), new7: cnt((u) => now - u.created_at < 7 * DAY), new30: cnt((u) => now - u.created_at < 30 * DAY),
     active1: cnt((u) => now - u.last_seen < DAY), active7: cnt((u) => now - u.last_seen < 7 * DAY),
-    withOps, back3: old3.length ? Math.round(100 * back(old3, 2) / old3.length) : null, back7: old7.length ? Math.round(100 * back(old7, 6) / old7.length) : null,
+    bySrc, withOps, back3: old3.length ? Math.round(100 * back(old3, 2) / old3.length) : null, back7: old7.length ? Math.round(100 * back(old7, 6) / old7.length) : null,
     trial: users.filter((u) => now - u.created_at < TRIAL_DAYS * DAY && !(prem.get(u.id) > now)).length,
     premium: [...prem.values()].filter((v) => v > now).length, payers: payers.size,
     conv: users.length ? Math.round(1000 * payers.size / users.length) / 10 : 0,
@@ -1073,6 +1079,8 @@ async function handleUpdate(u) {
       reply_markup: { inline_keyboard: [[{ text: '✅ Подтвердить вход', callback_data: 'wl|y|' + wl[1] }, { text: '❌ Не я', callback_data: 'wl|n|' + wl[1] }]] },
     });
   }
+  const sm = /^\/start\s+([a-z0-9]{1,12})$/i.exec(text);
+  if (sm && m.from) { try { q.srcSet.run(m.from.id, sm[1].toLowerCase(), Date.now()); } catch (e) { /* метка необязательна */ } }
   if (/^\/(plans|buy|subscribe)\b/.test(text)) return tgApi('sendMessage', { chat_id: m.chat.id, ...plansMessage(m.from.id) });
   if (!text.startsWith('/') && await handleQuick(m, text)) return;
   const msg = text.startsWith('/start')
