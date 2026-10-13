@@ -1311,7 +1311,6 @@ function render(){
   applyTheme();
   try { snowSync(); } catch (e) {}
   try { garlandSync(); } catch (e) {}
-  try { capsSync(); } catch (e) {}
   var views = {home:vHome, goals:vGoals, debt:vDebt, an:vAn, set:vSet, prof:vProf};
   $('#app').innerHTML = (ONLINE && (TAB === 'home' || TAB === 'goals' || TAB === 'debt' || TAB === 'an') ? scopeBar() : '') + views[TAB]();
   var tabs = [['home','Главная','home'],['goals','Цели','target'],['debt','Долги','card'],['an','Аналитика','chart'],['prof','Профиль','user']];
