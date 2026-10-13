@@ -1143,6 +1143,7 @@ function currencyCard(){
 }
 function themeCard(){
   return '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + Object.keys(THEMES).map(function(k){ var th = THEMES[k]; return '<button class="th '+((P().theme || 'vio') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join('') + '</div>' +
+    '<label>Зимний вайб</label><div class="seg"><button class="'+(P().snow !== false ? 'on' : '')+'" data-act="snow" data-v="1">❄ Снегопад</button><button class="'+(P().snow === false ? 'on' : '')+'" data-act="snow" data-v="0">Без снега</button></div>' +
     '<label>Размер интерфейса</label><div class="seg">' + Object.keys(SCALES).map(function(k){ return '<button class="'+((P().scale || 'm') === k ? 'on' : '')+'" data-act="scale" data-v="'+k+'">'+SCALES[k].n+'</button>'; }).join('') + '</div></div>';
 }
 function vSet(){
@@ -1156,8 +1157,46 @@ function vSet(){
     '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button>' + (ONLINE ? '<button class="btn danger" style="margin-top:0.625rem" data-act="delaccount">Удалить мои данные с сервера</button>' : '') + '</div>';
 }
 
+/* ===== Снегопад ===== */
+var SNOW = { cv: null, ctx: null, fl: [], on: false, raf: 0, w: 0, h: 0, dark: true, last: 0 };
+function snowWanted(){ try { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return false; } catch (e) {} return !(P() && P().snow === false); }
+function snowInit(){
+  if (SNOW.cv) return;
+  var c = document.createElement('canvas');
+  c.id = 'snowcv'; c.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:12';
+  document.body.appendChild(c); SNOW.cv = c; SNOW.ctx = c.getContext('2d');
+  var rs = function(){ var d = Math.min(window.devicePixelRatio || 1, 2); SNOW.w = window.innerWidth; SNOW.h = window.innerHeight; c.width = SNOW.w * d; c.height = SNOW.h * d; SNOW.ctx.setTransform(d, 0, 0, d, 0, 0); };
+  rs(); window.addEventListener('resize', rs);
+  for (var i = 0; i < 46; i++) SNOW.fl.push(snowMake(true));
+  document.addEventListener('visibilitychange', function(){ if (document.hidden) snowStop(); else snowSync(); });
+}
+function snowMake(any){ var r = 1.4 + Math.random() * 3.2; return { x: Math.random() * SNOW.w, y: any ? Math.random() * SNOW.h : -10, r: r, v: 18 + r * 9 + Math.random() * 14, ph: Math.random() * 6.28, sw: 8 + Math.random() * 18, a: .55 + Math.random() * .4 }; }
+function snowFrame(ts){
+  if (!SNOW.on) return;
+  var dt = Math.min(.05, (ts - (SNOW.last || ts)) / 1000); SNOW.last = ts;
+  var x = SNOW.ctx; x.clearRect(0, 0, SNOW.w, SNOW.h);
+  for (var i = 0; i < SNOW.fl.length; i++) {
+    var f = SNOW.fl[i]; f.y += f.v * dt; f.ph += dt * 1.1;
+    if (f.y > SNOW.h + 10) { SNOW.fl[i] = f = snowMake(false); }
+    var px = f.x + Math.sin(f.ph) * f.sw;
+    x.beginPath(); x.arc(px, f.y, f.r, 0, 6.283);
+    if (SNOW.dark) { x.fillStyle = 'rgba(255,255,255,' + f.a + ')'; }
+    else { x.fillStyle = 'rgba(255,255,255,' + Math.min(1, f.a + .2) + ')'; x.shadowColor = 'rgba(90,120,190,.55)'; x.shadowBlur = 4; }
+    x.fill(); x.shadowBlur = 0;
+  }
+  SNOW.raf = requestAnimationFrame(snowFrame);
+}
+function snowStop(){ SNOW.on = false; if (SNOW.raf) cancelAnimationFrame(SNOW.raf); SNOW.raf = 0; if (SNOW.ctx) SNOW.ctx.clearRect(0, 0, SNOW.w, SNOW.h); }
+function snowSync(){
+  if (!snowWanted() || document.hidden) { snowStop(); if (SNOW.cv) SNOW.cv.style.display = 'none'; return; }
+  snowInit(); SNOW.cv.style.display = '';
+  try { var bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().replace('#', ''); if (bg.length === 3) bg = bg.replace(/./g, '$&$&'); var lum = (parseInt(bg.substr(0,2),16)*299 + parseInt(bg.substr(2,2),16)*587 + parseInt(bg.substr(4,2),16)*114) / 1000; SNOW.dark = lum < 140; } catch (e) {}
+  if (!SNOW.on) { SNOW.on = true; SNOW.last = 0; SNOW.raf = requestAnimationFrame(snowFrame); }
+}
+
 function render(){
   applyTheme();
+  try { snowSync(); } catch (e) {}
   var views = {home:vHome, goals:vGoals, debt:vDebt, an:vAn, set:vSet, prof:vProf};
   $('#app').innerHTML = (ONLINE && (TAB === 'home' || TAB === 'goals' || TAB === 'debt' || TAB === 'an') ? scopeBar() : '') + views[TAB]();
   var tabs = [['home','Главная','home'],['goals','Цели','target'],['debt','Долги','card'],['an','Аналитика','chart'],['prof','Профиль','user']];
@@ -1560,6 +1599,7 @@ var ACT = {
   },
   stats: function(){ api('GET', '/api/admin/stats').then(statsSheet).catch(function(){ toast('Не удалось загрузить статистику'); }); },
   theme: function(d){ P().theme = d.v; markDirty('me'); haptic(); render(); },
+  snow: function(d){ P().snow = d.v === '1'; markDirty('me'); haptic(); render(); },
   scale: function(d){ P().scale = d.v; markDirty('me'); haptic(); render(); },
   scope: function(d){ setScope(d.v); },
   openfam: function(){ openFamily(); },
