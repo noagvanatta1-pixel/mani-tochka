@@ -406,26 +406,31 @@ html[data-theme=pink] .hgrid .cat .ch .ci,html[data-theme=mint] .hgrid .cat .ch 
 .gfore{margin:-.25rem .375rem .875rem;font-size:.8125rem;font-weight:600;color:var(--muted)}
 .shareimg{width:100%;border-radius:1rem;display:block;margin-top:.5rem}
 
-/* ===== Тема «Новый год»: снег на иконках, лёд, гирлянда ===== */
-html[data-theme=ny]{--cap:radial-gradient(circle at 16% 100%,#fff .3rem,transparent .32rem),radial-gradient(circle at 40% 100%,#fff .42rem,transparent .44rem),radial-gradient(circle at 66% 100%,#fff .34rem,transparent .36rem),radial-gradient(circle at 88% 100%,#fff .26rem,transparent .28rem),linear-gradient(#fff,#e6f6ff) bottom/100% 42% no-repeat}
-html[data-theme=ny] body{padding-top:2.6rem;background:radial-gradient(60rem 30rem at 50% -8rem,#13305a 0,transparent 70%),var(--bg);background-attachment:fixed}
+/* ===== Тема «Новый год»: снег и лёд на иконках и виджетах, гирлянда-зигзаг на фоне ===== */
+html[data-theme=ny]{--cap:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 20' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23fff'/%3E%3Cstop offset='1' stop-color='%23d3ecff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0 20V14C3 9 9 8 13 11C15 4 24 1 30 6C34 0 46 -1 51 5C56 1 66 1 70 7C75 3 85 4 88 10C93 8 98 10 100 14V20Z' fill='url(%23g)'/%3E%3Cpath d='M0 20V17C10 15 20 17 30 16C45 14 60 17 75 16C88 15 95 16 100 17V20Z' fill='%239fd0f0' opacity='.6'/%3E%3Ccircle cx='22' cy='9' r='.9' fill='%23fff'/%3E%3Ccircle cx='47' cy='6' r='.8' fill='%23fff'/%3E%3Ccircle cx='78' cy='9' r='.9' fill='%23fff'/%3E%3C/svg%3E");--ice:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='i' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23fff'/%3E%3Cstop offset='1' stop-color='%237fcfff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg fill='url(%23i)' opacity='.95'%3E%3Crect x='0' y='0' width='100' height='3'/%3E%3Cpolygon points='2,0 10,0 6,16'/%3E%3Cpolygon points='14,0 24,0 19,28'/%3E%3Cpolygon points='28,0 36,0 32,12'/%3E%3Cpolygon points='40,0 52,0 46,30'/%3E%3Cpolygon points='56,0 64,0 60,15'/%3E%3Cpolygon points='68,0 78,0 73,24'/%3E%3Cpolygon points='82,0 90,0 86,11'/%3E%3Cpolygon points='92,0 100,0 96,19'/%3E%3C/g%3E%3Cg stroke='%23fff' stroke-width='.9' opacity='.8'%3E%3Cline x1='17' y1='2' x2='19' y2='20'/%3E%3Cline x1='45' y1='2' x2='46' y2='22'/%3E%3Cline x1='71' y1='2' x2='73' y2='16'/%3E%3C/g%3E%3C/svg%3E");background:radial-gradient(60rem 30rem at 50% -8rem,#13305a 0,transparent 70%),#0a1426}
+html[data-theme=ny] body{background:transparent}
 html[data-theme=ny] .card{box-shadow:inset 0 1px 0 rgba(200,235,255,.18),0 .5rem 1.4rem rgba(0,0,0,.35)}
-html[data-theme=ny] .bal{box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 0 1.6rem rgba(127,216,255,.28)}
+html[data-theme=ny] .card:not(.set):not(.empty),html[data-theme=ny] .safe,html[data-theme=ny] .plan,html[data-theme=ny] .streak{position:relative}
+html[data-theme=ny] .card:not(.set):not(.empty):before,html[data-theme=ny] .safe:before,html[data-theme=ny] .plan:before{content:"";position:absolute;left:.8rem;right:.8rem;top:-.44rem;height:.82rem;background:var(--cap) 0 0/100% 100% no-repeat;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4));pointer-events:none}
+html[data-theme=ny] .cg{position:relative}
+html[data-theme=ny] .cg:before{content:"";position:absolute;left:.5rem;right:.5rem;top:-.3rem;height:.52rem;background:var(--cap) 0 0/100% 100% no-repeat;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4));pointer-events:none}
+html[data-theme=ny] .bal{background:var(--cap) 0 0/100% .95rem no-repeat,var(--bal1);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 0 1.6rem rgba(127,216,255,.28);padding-top:1.6rem}
 html[data-theme=ny] .nav{background:linear-gradient(180deg,#16294a,#0f1d36);box-shadow:0 -.25rem 1.5rem rgba(0,0,0,.45),inset 0 1px 0 rgba(200,235,255,.3)}
-html[data-theme=ny] .nav button .i{position:relative;background:linear-gradient(160deg,rgba(255,255,255,.16),rgba(150,215,255,.05));box-shadow:inset 0 0 0 1px rgba(190,235,255,.38),0 0 .7rem rgba(127,216,255,.22)}
-html[data-theme=ny] .nav button.on .i{background:linear-gradient(160deg,rgba(160,225,255,.35),rgba(80,160,230,.18));box-shadow:inset 0 0 0 1px rgba(210,243,255,.7),0 0 1rem rgba(127,216,255,.5)}
-html[data-theme=ny] .nav button .i:before{content:"";position:absolute;left:.18rem;right:.18rem;top:-.36rem;height:.62rem;background:var(--cap);filter:drop-shadow(0 1px 1px rgba(0,0,0,.35));pointer-events:none}
-html[data-theme=ny] .nav button .i:after{content:"";position:absolute;left:.35rem;right:.35rem;bottom:-.3rem;height:.38rem;background:linear-gradient(180deg,rgba(225,247,255,.95),rgba(150,215,255,.55));clip-path:polygon(0 0,100% 0,100% 20%,94% 100%,86% 25%,74% 70%,62% 22%,50% 100%,38% 25%,26% 80%,14% 22%,6% 65%,0 20%);pointer-events:none}
-html[data-theme=ny] .fab{position:fixed;background:linear-gradient(160deg,#ff5468,#d12238);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35),0 .5rem 1.2rem rgba(232,51,74,.45)}
-html[data-theme=ny] .fab:before{content:"";position:absolute;left:.15rem;right:.15rem;top:-.42rem;height:.72rem;background:var(--cap);filter:drop-shadow(0 1px 1px rgba(0,0,0,.3));pointer-events:none;border-radius:.6rem .6rem 0 0}
+html[data-theme=ny] .nav button{gap:.4rem}
+html[data-theme=ny] .nav button .i{position:relative;background:linear-gradient(160deg,rgba(255,255,255,.16),rgba(150,215,255,.05));box-shadow:inset 0 0 0 1px rgba(190,235,255,.4),0 0 .7rem rgba(127,216,255,.22)}
+html[data-theme=ny] .nav button.on .i{background:linear-gradient(160deg,rgba(160,225,255,.35),rgba(80,160,230,.18));box-shadow:inset 0 0 0 1px rgba(210,243,255,.75),0 0 1rem rgba(127,216,255,.5)}
+html[data-theme=ny] .nav button .i:before{content:"";position:absolute;left:-.12rem;right:-.12rem;top:-.52rem;height:.82rem;background:var(--cap) 0 0/100% 100% no-repeat;filter:drop-shadow(0 1px 1px rgba(0,0,0,.45));pointer-events:none}
+html[data-theme=ny] .nav button .i:after{content:"";position:absolute;left:.1rem;right:.1rem;bottom:-.5rem;height:.55rem;background:var(--ice) 0 0/100% 100% no-repeat;filter:drop-shadow(0 0 2px rgba(127,216,255,.7));pointer-events:none}
+html[data-theme=ny] .fab{background:linear-gradient(160deg,#ff5468,#d12238);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35),0 .5rem 1.2rem rgba(232,51,74,.45)}
+html[data-theme=ny] .fab:before{content:"";position:absolute;left:-.1rem;right:-.1rem;top:-.58rem;height:.95rem;background:var(--cap) 0 0/100% 100% no-repeat;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4));pointer-events:none}
 html[data-theme=ny] .ci{position:relative}
-html[data-theme=ny] .cg .ci:before,html[data-theme=ny] .brow .ci:before{content:"";position:absolute;left:.08rem;right:.08rem;top:-.26rem;height:.46rem;background:var(--cap);filter:drop-shadow(0 1px 1px rgba(0,0,0,.35));pointer-events:none}
+html[data-theme=ny] .cg .ci:before,html[data-theme=ny] .brow .ci:before{content:"";position:absolute;left:-.06rem;right:-.06rem;top:-.3rem;height:.5rem;background:var(--cap) 0 0/100% 100% no-repeat;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35));pointer-events:none}
 html[data-theme=ny] .cg .ci,html[data-theme=ny] .brow .ci{box-shadow:inset 0 0 0 1px rgba(190,235,255,.45),0 0 .7rem rgba(127,216,255,.3)}
-#garland{position:fixed;left:0;top:0;width:100%;height:2.7rem;z-index:13;pointer-events:none}
-#garland svg{display:block;width:100%;height:100%;overflow:visible}
+#garland{position:fixed;left:0;top:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.82}
+#garland svg{display:block;width:100%;height:100%}
 #garland .b{animation:gtw 1.8s ease-in-out infinite}
 #garland .b.c1{animation-delay:.3s}#garland .b.c2{animation-delay:.9s}#garland .b.c3{animation-delay:1.4s}
-@keyframes gtw{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes gtw{0%,100%{opacity:.45}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){#garland .b{animation:none}}
 </style>
 </head>
@@ -1181,27 +1186,31 @@ function vSet(){
     '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button>' + (ONLINE ? '<button class="btn danger" style="margin-top:0.625rem" data-act="delaccount">Удалить мои данные с сервера</button>' : '') + '</div>';
 }
 
-/* ===== Гирлянда (тема «Новый год») ===== */
+/* ===== Гирлянда-зигзаг на фоне (тема «Новый год») ===== */
 function garlandSync(){
   var on = document.documentElement.getAttribute('data-theme') === 'ny', g = document.getElementById('garland');
   if (!on) { if (g) g.remove(); return; }
-  var w = window.innerWidth;
-  if (g && g.getAttribute('data-w') == String(w)) return;
-  if (!g) { g = document.createElement('div'); g.id = 'garland'; document.body.appendChild(g); }
-  g.setAttribute('data-w', w);
-  var n = Math.max(4, Math.round(w / 84)), aw = w / n, sag = 20, cols = ['#ff4d5e', '#ffd23f', '#4ade80', '#5cc8ff'];
-  var wire = 'M0,2', bulbs = '', k = 0;
-  for (var i = 0; i < n; i++) {
-    var x0 = i * aw; wire += ' Q' + (x0 + aw / 2).toFixed(1) + ',' + (2 + sag * 2).toFixed(1) + ' ' + (x0 + aw).toFixed(1) + ',2';
-    [.22, .5, .78].forEach(function(t){
-      var x = x0 + aw * t, y = 2 + 2 * t * (1 - t) * sag * 2, c = cols[k % 4], cl = 'c' + (k % 4);
-      bulbs += '<g class="b ' + cl + '" transform="translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ')"><rect x="-2.2" y="-1" width="4.4" height="4" rx="1" fill="#2a3a52"/><ellipse cx="0" cy="8" rx="4.2" ry="6" fill="' + c + '" style="filter:drop-shadow(0 0 5px ' + c + ')"/><ellipse cx="-1.3" cy="6" rx="1.1" ry="1.8" fill="#fff" opacity=".55"/></g>';
+  var w = window.innerWidth, h = window.innerHeight, key = w + 'x' + h;
+  if (g && g.getAttribute('data-k') === key) return;
+  if (!g) { g = document.createElement('div'); g.id = 'garland'; document.body.insertBefore(g, document.body.firstChild); }
+  g.setAttribute('data-k', key);
+  var cols = ['#ff4d5e', '#ffd23f', '#4ade80', '#5cc8ff'], drop = 118, legs = Math.ceil(h / drop) + 1, k = 0;
+  var defs = '<defs>' + cols.map(function(c, i){ return '<radialGradient id="gl' + i + '"><stop offset="0" stop-color="' + c + '" stop-opacity=".6"/><stop offset="1" stop-color="' + c + '" stop-opacity="0"/></radialGradient>'; }).join('') + '</defs>';
+  var wire = '', bulbs = '', x = 0, y = 8;
+  wire = 'M0,8';
+  for (var i = 0; i < legs; i++) {
+    var x2 = (i % 2 === 0) ? w : 0, y2 = y + drop;
+    wire += ' L' + x2 + ',' + y2;
+    var L = Math.sqrt(w * w + drop * drop), m = Math.max(4, Math.floor(L / 42));
+    for (var j = 0; j < m; j++) {
+      var t = (j + .5) / m, bx = x + (x2 - x) * t, by = y + (y2 - y) * t, ci = k % 4;
+      bulbs += '<g class="b c' + ci + '" transform="translate(' + bx.toFixed(1) + ',' + by.toFixed(1) + ')"><circle cx="0" cy="9" r="12" fill="url(#gl' + ci + ')"/><rect x="-2" y="0" width="4" height="4" rx="1" fill="#33465f"/><ellipse cx="0" cy="9" rx="3.8" ry="5.4" fill="' + cols[ci] + '"/><ellipse cx="-1.2" cy="7.2" rx="1" ry="1.7" fill="#fff" opacity=".6"/></g>';
       k++;
-    });
+    }
+    x = x2; y = y2;
   }
-  g.innerHTML = '<svg viewBox="0 0 ' + w + ' 44" preserveAspectRatio="none"><path d="' + wire + '" fill="none" stroke="#2a3a52" stroke-width="2"/>' + bulbs + '</svg>';
+  g.innerHTML = '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' + defs + '<path d="' + wire + '" fill="none" stroke="#2c3f5a" stroke-width="2" stroke-linejoin="round"/>' + bulbs + '</svg>';
 }
-
 /* ===== Снегопад ===== */
 var SNOW = { cv: null, ctx: null, fl: [], on: false, raf: 0, w: 0, h: 0, dark: true, last: 0 };
 function snowWanted(){ try { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return false; } catch (e) {} return !(P() && P().snow === false); }
