@@ -416,15 +416,23 @@ html[data-theme=ny] .cg{position:relative}
 html[data-theme=ny] .cg:before{content:"";position:absolute;left:var(--scl,.5rem);right:var(--scr,.5rem);top:calc(var(--sch,.52rem) * -.55);height:var(--sch,.52rem);background:var(--cap) 0 0/100% 100% no-repeat;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4));pointer-events:none}
 html[data-theme=ny] .bal{background:var(--cap) 0 0/100% .95rem no-repeat,var(--bal1);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 0 1.6rem rgba(127,216,255,.28);padding-top:1.6rem}
 html[data-theme=ny] .nav{background:linear-gradient(180deg,#16294a,#0f1d36);box-shadow:0 -.25rem 1.5rem rgba(0,0,0,.45),inset 0 1px 0 rgba(200,235,255,.3)}
-html[data-theme=ny] .nav button{gap:.4rem}
-html[data-theme=ny] .nav button .i{position:relative;background:linear-gradient(160deg,rgba(255,255,255,.16),rgba(150,215,255,.05));box-shadow:inset 0 0 0 1px rgba(190,235,255,.4),0 0 .7rem rgba(127,216,255,.22)}
-html[data-theme=ny] .nav button.on .i{background:linear-gradient(160deg,rgba(160,225,255,.35),rgba(80,160,230,.18));box-shadow:inset 0 0 0 1px rgba(210,243,255,.75),0 0 1rem rgba(127,216,255,.5)}
-html[data-theme=ny] .nav button .i:before{content:"";position:absolute;left:-.12rem;right:-.12rem;top:-.52rem;height:.82rem;background:var(--cap) 0 0/100% 100% no-repeat;filter:drop-shadow(0 1px 1px rgba(0,0,0,.45));pointer-events:none}
-html[data-theme=ny] .nav button .i:after{content:"";position:absolute;left:.1rem;right:.1rem;bottom:-.5rem;height:.55rem;background:var(--ice) 0 0/100% 100% no-repeat;filter:drop-shadow(0 0 2px rgba(127,216,255,.7));pointer-events:none}
-html[data-theme=ny] .fab{background:linear-gradient(160deg,#ff5468,#d12238);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35),0 .5rem 1.2rem rgba(232,51,74,.45)}
 html[data-theme=ny] .ci{position:relative}
 html[data-theme=ny] .cg .ci:before,html[data-theme=ny] .brow .ci:before{content:"";position:absolute;left:-.06rem;right:-.06rem;top:-.3rem;height:.5rem;background:var(--cap) 0 0/100% 100% no-repeat;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35));pointer-events:none}
 html[data-theme=ny] .cg .ci,html[data-theme=ny] .brow .ci{box-shadow:inset 0 0 0 1px rgba(190,235,255,.45),0 0 .7rem rgba(127,216,255,.3)}
+html[data-theme=ny]{--nav:4.9rem}
+html[data-theme=ny] .nav button{gap:.28rem;padding-top:.75rem}
+html[data-theme=ny] .nav button .i{position:relative;width:2.2rem;height:2.2rem;border-radius:50%;color:#fff;background:radial-gradient(circle at 31% 26%,rgba(255,255,255,.95) 0 6%,rgba(255,255,255,.28) 7% 17%,transparent 18%),radial-gradient(circle at 72% 82%,rgba(0,0,0,.38),transparent 58%),radial-gradient(circle at 38% 32%,var(--b1),var(--b2) 62%,var(--b3));box-shadow:0 .25rem .6rem rgba(0,0,0,.45),0 0 .8rem var(--bg2,transparent);transition:transform .2s,box-shadow .2s}
+html[data-theme=ny] .nav button .i svg{filter:drop-shadow(0 1px 1px rgba(0,0,0,.45))}
+html[data-theme=ny] .nav button:nth-child(5n+1) .i{--b1:#ff8d99;--b2:#e0263f;--b3:#7d0f20;--bg2:rgba(255,80,100,.4)}
+html[data-theme=ny] .nav button:nth-child(5n+2) .i{--b1:#ffe27a;--b2:#f0a516;--b3:#8a5200;--bg2:rgba(255,200,70,.4)}
+html[data-theme=ny] .nav button:nth-child(5n+3) .i{--b1:#8cc4ff;--b2:#2f7fe8;--b3:#12307a;--bg2:rgba(90,160,255,.4)}
+html[data-theme=ny] .nav button:nth-child(5n+4) .i{--b1:#8cf0b4;--b2:#22b565;--b3:#0b5a30;--bg2:rgba(70,220,130,.4)}
+html[data-theme=ny] .nav button:nth-child(5n+5) .i{--b1:#d4b0ff;--b2:#8a4fe6;--b3:#3d1a85;--bg2:rgba(160,110,255,.4)}
+html[data-theme=ny] .nav button.on .i{transform:scale(1.14) translateY(-.1rem);box-shadow:0 .3rem .7rem rgba(0,0,0,.5),0 0 1.3rem var(--bg2)}
+html[data-theme=ny] .nav button .i:before{content:"";position:absolute;left:50%;top:-.42rem;width:.78rem;height:.5rem;margin-left:-.39rem;border-radius:.2rem .2rem .1rem .1rem;background:linear-gradient(90deg,#9a6a12,#ffe58a 45%,#b7801c);box-shadow:0 1px 2px rgba(0,0,0,.4)}
+html[data-theme=ny] .nav button .i:after{content:"";position:absolute;left:50%;top:-.88rem;width:.52rem;height:.52rem;margin-left:-.26rem;border-radius:50%;border:.14rem solid #e9c45a;border-bottom-color:transparent;transform:rotate(0)}
+html[data-theme=ny] .fab{background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='s' x1='0' y1='0' x2='0.4' y2='1'%3E%3Cstop offset='0' stop-color='%23fff7b8'/%3E%3Cstop offset='.5' stop-color='%23ffc928'/%3E%3Cstop offset='1' stop-color='%23e08a00'/%3E%3C/linearGradient%3E%3Cfilter id='b' x='-30%25' y='-30%25' width='160%25' height='160%25'%3E%3CfeGaussianBlur stdDeviation='4'/%3E%3C/filter%3E%3C/defs%3E%3Cpolygon points='50.0,10.0 61.2,38.6 91.8,40.4 68.1,59.9 75.9,89.6 50.0,73.0 24.1,89.6 31.9,59.9 8.2,40.4 38.8,38.6' fill='%23ffd84d' opacity='.75' filter='url(%23b)'/%3E%3Cpolygon points='50.0,10.0 61.2,38.6 91.8,40.4 68.1,59.9 75.9,89.6 50.0,73.0 24.1,89.6 31.9,59.9 8.2,40.4 38.8,38.6' fill='url(%23s)' stroke='%23fff3a0' stroke-width='2' stroke-linejoin='round'/%3E%3Cpolygon points='50,16 55,40 50,54 45,40' fill='%23fff' opacity='.55'/%3E%3C/svg%3E") center/contain no-repeat;border-radius:0;width:4.3rem;height:4.3rem;color:#8a1426;box-shadow:none;filter:drop-shadow(0 .3rem .5rem rgba(0,0,0,.45))}
+html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 #garland{position:fixed;left:0;top:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.82}
 #garland svg{display:block;width:100%;height:100%}
 #garland .b{animation:gtw 1.8s ease-in-out infinite}
@@ -1234,11 +1242,11 @@ function snIce(r, W, H){
 var CAPS = { obs: null, t: 0 };
 function capsApply(){
   if (document.documentElement.getAttribute('data-theme') !== 'ny') return;
-  var sel = '.card:not(.set):not(.empty),.safe,.plan,.cg,.bal,.nav button .i,.cg .ci,.brow .ci', els = document.querySelectorAll(sel), i = 0;
+  var sel = '.card:not(.set):not(.empty),.safe,.plan,.cg,.bal,.cg .ci,.brow .ci', els = document.querySelectorAll(sel), i = 0;
   els.forEach(function(el){
     i++; if (el.getAttribute('data-sn')) return;
     var w = Math.max(40, Math.round((el.offsetWidth || 160) / 2)), r = snRng(i * 7919 + (el.textContent || '').length * 31 + w);
-    var isNav = el.matches('.nav button .i'), isCi = el.matches('.ci'), isBal = el.matches('.bal');
+    var isNav = false, isCi = el.matches('.ci'), isBal = el.matches('.bal');
     if (isNav) { el.style.setProperty('--cap', snUri(snDrift(r, w, 16))); el.style.setProperty('--ice', snUri(snIce(r, w, 24))); }
     else if (isCi) { el.style.setProperty('--cap', snUri(snDrift(r, w, 14))); }
     else if (isBal) { el.style.setProperty('--cap', snUri(snDrift(r, w, 20, true))); }
