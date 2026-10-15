@@ -69,6 +69,9 @@ db.exec(`
     tz INTEGER NOT NULL DEFAULT 180, last_sent TEXT NOT NULL DEFAULT '',
     weekly INTEGER NOT NULL DEFAULT 0, last_week TEXT NOT NULL DEFAULT ''
   );
+  CREATE TABLE IF NOT EXISTS nudges (
+    user_id INTEGER PRIMARY KEY, trial_end INTEGER NOT NULL DEFAULT 0
+  );
   CREATE TABLE IF NOT EXISTS refcodes (
     user_id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE
   );
@@ -158,6 +161,14 @@ const q = {
   markSent: db.prepare('UPDATE prefs SET last_sent = ? WHERE user_id = ?'),
   markBills: db.prepare('UPDATE prefs SET last_bills = ? WHERE user_id = ?'),
   markMonth: db.prepare('UPDATE prefs SET last_month = ? WHERE user_id = ?'),
+  /* новому пользователю сразу включаем вечернее напоминание (отключается кнопкой в самом сообщении или в настройках) */
+  defPrefs: db.prepare('INSERT OR IGNORE INTO prefs (user_id, remind, weekly, bills, monthly, hour, tz) VALUES (?, 1, 0, 0, 0, 20, 180)'),
+  remindOff: db.prepare('UPDATE prefs SET remind = 0 WHERE user_id = ?'),
+  trialCandidates: db.prepare(`SELECT u.id AS id, u.created_at AS created_at, COALESCE(p.tz, 180) AS tz
+    FROM users u LEFT JOIN prefs p ON p.user_id = u.id LEFT JOIN nudges n ON n.user_id = u.id
+    WHERE COALESCE(n.trial_end, 0) = 0 AND u.id != ?`),
+  markTrialNudge: db.prepare(`INSERT INTO nudges (user_id, trial_end) VALUES (?, 1)
+    ON CONFLICT(user_id) DO UPDATE SET trial_end = 1`),
 };
 const FAMILY_MAX = Number(process.env.FAMILY_MAX) || 2;
 /* Подписка. PAYWALL=1 включает платные функции после пробного периода. */
@@ -322,7 +333,15 @@ function touch(user) {
   if (t - (seen.get(user.id) || 0) > 10 * 60 * 1000) {
     q.upsertUser.run(user.id, user.first_name, t, t);
     seen.set(user.id, t);
+    onUserTouched(user.id, t);
   }
+}
+/* только что созданному пользователю включаем вечернее напоминание */
+function onUserTouched(uid, t) {
+  try {
+    const u = q.userCreated.get(uid);
+    if (u && u.created_at === t && uid !== OWNER_ID) q.defPrefs.run(uid);
+  } catch (_) { /* не мешаем входу */ }
 }
 
 function rateLimit(uid) {
@@ -558,6 +577,7 @@ async function handleApi(req, res, url) {
     if (e.state !== 'ok' || !(e.uid > 0)) return json(res, 200, { status: 'denied' });
     const token = crypto.randomBytes(32).toString('hex'), t = Date.now();
     q.upsertUser.run(e.uid, e.name, t, t);
+    onUserTouched(e.uid, t);
     q.sessIns.run(sha256hex(token), e.uid, t, t);
     return json(res, 200, { status: 'ok', token, user: { id: e.uid, first_name: e.name } });
   }
@@ -626,6 +646,7 @@ async function handleApi(req, res, url) {
   }
 
   if (DEV && p === '/api/dev/reminders' && m === 'POST') { await sendReminders(true); return json(res, 200, { ok: true }); }
+  if (DEV && p === '/api/dev/nudges' && m === 'POST') { await sendTrialNudges(); return json(res, 200, { ok: true }); }
 
   if (p === '/api/rates' && m === 'GET') {
     const c = await getRates();
@@ -961,6 +982,11 @@ async function handleCallback(cb) {
     await tgApi('editMessageText', { chat_id: cb.message.chat.id, message_id: cb.message.message_id, text: parts[1] === 'y' ? '✅ Вход подтверждён. Возвращайтесь в приложение.' : 'Вход отменён.' });
     return;
   }
+  if (parts[0] === 'rm' && cb.from) {
+    try { q.remindOff.run(cb.from.id); } catch (_) {}
+    await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Напоминания выключены. Включить можно в настройках приложения.', show_alert: true });
+    return;
+  }
   if (parts[0] === 'pl' && cb.message) {
     await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
     await tgApi('sendMessage', { chat_id: cb.message.chat.id, ...plansMessage(cb.from.id) });
@@ -1215,11 +1241,13 @@ async function sendReminders(ignoreHour) {
       if (!ignoreHour && (lp.hour < r.hour || lp.hour > r.hour + 3)) continue;
       const st = loadState(r.user_id).state;
       if (!st) continue;
+      if (PAYWALL && planInfo(r.user_id).locked) continue;   // напоминания входят в подписку
       if (r.remind && r.last_sent !== lp.day) {
         q.markSent.run(lp.day, r.user_id);
         const wrote = st.ops.some((o) => o.type === 'expense' && o.date === lp.day);
         if (!wrote) {
-          const resp = await tgApi('sendMessage', { chat_id: r.user_id, text: 'Вы ещё не записали траты за сегодня. Это займёт пару секунд 👇', reply_markup: openButton() }, 10000);
+          const kb = openButton() ? { inline_keyboard: [...openButton().inline_keyboard, [{ text: 'Не напоминать', callback_data: 'rm' }]] } : undefined;
+          const resp = await tgApi('sendMessage', { chat_id: r.user_id, text: 'Вы ещё не записали траты за сегодня. Это займёт пару секунд 👇', reply_markup: kb }, 10000);
           if (!resp.ok) q.markSent.run('', r.user_id);
         }
       }
@@ -1247,7 +1275,30 @@ async function sendReminders(ignoreHour) {
     } catch (_) { q.markSent.run('', r.user_id); q.markWeek.run('', r.user_id); q.markBills.run('', r.user_id); q.markMonth.run('', r.user_id); }
   }
 }
-setInterval(() => { sendReminders().catch(() => {}); }, 10 * 60 * 1000).unref();
+/* За день до конца пробного периода один раз напоминаем, что записано, и показываем цены. Только при включённой подписке. */
+async function sendTrialNudges() {
+  if (!BOT_NAME || !BOT_TOKEN || !PAYWALL) return;
+  const now = Date.now(), DAY = 86400000;
+  for (const u of q.trialCandidates.all(OWNER_ID)) {
+    try {
+      const left = u.created_at + TRIAL_DAYS * DAY - now;
+      if (left <= 0 || left > DAY) continue;
+      if (hasPremium(u.id)) continue;
+      const lp = localParts(u.tz);
+      if (lp.hour < 10 || lp.hour > 20) continue;
+      q.markTrialNudge.run(u.id);   // отмечаем сразу: заблокировавшим бота повторно не пишем
+      const st = loadState(u.id).state;
+      const n = st ? st.ops.length : 0;
+      const info = planInfo(u.id);
+      const text = 'Пробный период Копилки заканчивается завтра.\n' + (n ? `Вы уже записали операций: ${n}. ` : '') +
+        `Чтобы доступ остался, оформите подписку: от ${info.priceMonth} ₽ в месяц.`;
+      const kb = [[{ text: 'Подписка и цены', callback_data: 'pl' }]];
+      if (APP_URL) kb.push([{ text: 'Открыть Копилку', web_app: { url: APP_URL } }]);
+      await tgApi('sendMessage', { chat_id: u.id, text, reply_markup: { inline_keyboard: kb } }, 10000);
+    } catch (_) { /* следующий пользователь */ }
+  }
+}
+setInterval(() => { sendReminders().catch(() => {}); sendTrialNudges().catch(() => {}); }, 10 * 60 * 1000).unref();
 
 /* ---------- Запуск ---------- */
 server.listen(PORT, () => {
