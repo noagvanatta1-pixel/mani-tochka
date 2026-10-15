@@ -12,7 +12,15 @@
 <meta name="apple-mobile-web-app-title" content="Копилка">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>Копилка</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+/* Скрипт Telegram подключаем только внутри Telegram. Вне его (Android-приложение, сайт) telegram.org может не открываться
+   или «зависать», и тогда блокирующий <script> оставлял чёрный экран. */
+(function(){
+  var inTg = /tgWebApp/.test(location.hash || '') || !!window.TelegramWebviewProxy;
+  try { inTg = inTg || !!sessionStorage.getItem('__telegram__initParams'); } catch (e) {}
+  if (inTg) document.write('<script src="https://telegram.org/js/telegram-web-app.js"><\/script>');
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet"></noscript>
 <style>
