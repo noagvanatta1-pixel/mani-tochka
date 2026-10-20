@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ru" data-theme="vio">
+<html lang="ru" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#120d22">
+<meta name="theme-color" content="#000000">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="/pwa/icon-192.png">
 <link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png">
@@ -36,7 +36,7 @@
 html[data-theme=mint]{--bg:#ecf3f0;--ink:#0e2a26;--muted:#617a74;--pink:#4fb59d;--pink-d:#0f7d68;--pink-l:#d9eee7;--sh:14,42,38;--btn:#0f7d68;--bal1:#13917a;--bal2:#0b6454;--bar1:#4fb59d;--line:#dbe8e3;--grab:#c2d6cf;--toast:#0e2a26}
 html[data-theme=lav]{--bg:#f2eff7;--ink:#241a3a;--muted:#7a7092;--pink:#a58be0;--pink-d:#6b3fd1;--pink-l:#e8e0f8;--sh:36,26,58;--btn:#6b3fd1;--bal1:#7a4fe0;--bal2:#5a2fb8;--bar1:#a58be0;--line:#e5def2;--grab:#d3c9e8;--toast:#241a3a}
 html[data-theme=sky]{--bg:#eaf3f8;--ink:#0d2a3b;--muted:#5f7c8d;--pink:#4fb0d8;--pink-d:#0c7fae;--pink-l:#d6ecf6;--sh:13,42,59;--btn:#0c7fae;--bal1:#1493c4;--bal2:#0a6a93;--bar1:#4fb0d8;--line:#d9e8f0;--grab:#c1d7e3;--toast:#0d2a3b}
-html[data-theme=dark]{--bg:#0d1226;--card:#161d38;--ink:#eef0fb;--muted:#8f98bd;--pink:#7d8cff;--pink-d:#98a5ff;--pink-l:#1f2849;--sh:0,0,0;--btn:#4a5eff;--bal1:#3347f0;--bal2:#1b2aa8;--bar1:#7d8cff;--dangerbg:#3a1f2b;--line:#242d50;--grab:#3a4472;--toast:#2a3460;--green:#2fc596;--red:#ff7a80}
+html[data-theme=dark]{--bg:#000;--card:#101014;--ink:#f2f3fa;--muted:#8d90a6;--pink:#7d8cff;--pink-d:#98a5ff;--pink-l:#1a1a23;--sh:0,0,0;--btn:#4a5eff;--bal1:#3347f0;--bal2:#1b2aa8;--bar1:#7d8cff;--dangerbg:#3a1f2b;--line:#1f1f28;--grab:#34343f;--toast:#1d1d26;--green:#2fc596;--red:#ff7a80}
 html[data-theme=gra]{--bg:#111214;--card:#1b1c20;--ink:#f0f0f2;--muted:#9a9ca6;--pink:#c9a24a;--pink-d:#ffc24d;--pink-l:#26272d;--sh:0,0,0;--btn:#d98e0b;--bal1:#4a4d57;--bal2:#2c2e36;--bar1:#c9a24a;--dangerbg:#3a1f2b;--line:#2a2b31;--grab:#44464f;--toast:#2b2d34;--green:#2fc596;--red:#ff7a80}
 html[data-theme=emd]{--bg:#07140e;--card:#0f2218;--ink:#e9f6ef;--muted:#86a799;--pink:#3fc08f;--pink-d:#4fd9a2;--pink-l:#173325;--sh:0,0,0;--btn:#14936a;--bal1:#17936a;--bal2:#0b5f44;--bar1:#3fc08f;--dangerbg:#3a1f2b;--line:#1b3528;--grab:#2c5440;--toast:#1c3a2c;--green:#2fc596;--red:#ff7a80}
 html[data-theme=win]{--bg:#180c13;--card:#27141f;--ink:#fbeef3;--muted:#b392a1;--pink:#e0668f;--pink-d:#ff8fb2;--pink-l:#3a1c2b;--sh:0,0,0;--btn:#c23567;--bal1:#b22d5d;--bal2:#7a1a3f;--bar1:#e0668f;--dangerbg:#3a1f2b;--line:#3a1e2c;--grab:#5d3347;--toast:#42202f;--green:#2fc596;--red:#ff7a80}
@@ -603,7 +603,7 @@ function ic(n, s){ s = s || 22; var r = (s / 16) + 'rem'; return '<svg style="wi
 var KEY = 'mani_tochka_v1' + (ONLINE ? '_' + tgUser.id : '');
 function defaults(){
   return {
-    name:'', theme:'vio', scale:'m', defaultIncome:90000, income:{}, mainGoal:'g1', ops:[], debts:[], cur:'RUB',
+    name:'', theme:'dark', scale:'m', defaultIncome:90000, income:{}, mainGoal:'g1', ops:[], debts:[], cur:'RUB',
     cats:[
       {id:'c1',name:'Жилье',emoji:'🏠',limit:0},
       {id:'c2',name:'ЖКХ',emoji:'💡',limit:5000},
@@ -625,11 +625,11 @@ var S = null;
 try { S = JSON.parse(localStorage.getItem(KEY) || (ONLINE ? localStorage.getItem('mani_tochka_v1') : null)); } catch(e){}
 if (!S || !S.cats || !S.goals) S = defaults();
 var THEMES = {
-  pink:{n:'Кобальт',bg:'#eef0f7',a:'#7d8cff',b:'#2f45ff'},
+  pink:{n:'Светлая',bg:'#eef0f7',a:'#7d8cff',b:'#2f45ff'},
   mint:{n:'Хвоя',bg:'#ecf3f0',a:'#4fb59d',b:'#0f7d68'},
   lav:{n:'Слива',bg:'#f2eff7',a:'#a58be0',b:'#6b3fd1'},
   sky:{n:'Лагуна',bg:'#eaf3f8',a:'#4fb0d8',b:'#0c7fae'},
-  dark:{n:'Ночь',bg:'#0d1226',a:'#7d8cff',b:'#1b2aa8'},
+  dark:{n:'Чёрная',bg:'#000000',a:'#7d8cff',b:'#1b2aa8'},
   gra:{n:'Графит',bg:'#111214',a:'#c9a24a',b:'#2c2e36'},
   emd:{n:'Изумруд',bg:'#07140e',a:'#3fc08f',b:'#0b5f44'},
   win:{n:'Бордо',bg:'#180c13',a:'#e0668f',b:'#7a1a3f'},
@@ -640,7 +640,7 @@ var THEMES = {
 };
 var SCALES = {s:{n:'Мельче',k:0.78}, m:{n:'Обычный',k:0.86}, l:{n:'Крупнее',k:1}};
 function applyTheme(){
-  var t = THEMES[P().theme] ? P().theme : 'vio';
+  var t = THEMES[P().theme] ? P().theme : 'dark';
   document.documentElement.setAttribute('data-theme', t);
   document.documentElement.style.fontSize = (16 * SCALES[SCALES[P().scale] ? P().scale : 'm'].k) + 'px';
   document.documentElement.style.setProperty('--sym', '"' + SYM() + '"');
@@ -686,7 +686,7 @@ function normalize(s){
   if (typeof s.defaultIncome !== 'number') s.defaultIncome = d.defaultIncome;
   if (typeof s.name !== 'string') s.name = '';
   if (typeof s.incomeMax !== 'number' || !(s.incomeMax > 0)) delete s.incomeMax;
-  if (!THEMES[s.theme]) s.theme = 'vio';
+  if (!THEMES[s.theme]) s.theme = 'dark';
   if (!SCALES[s.scale]) s.scale = 'm';
   if (s.work && typeof s.work === 'object') {
     var w = s.work;
@@ -1214,10 +1214,12 @@ function currencyCard(){
     '<div class="hi" style="margin:.7rem .25rem 0;font-size:.8rem;font-weight:600">Все суммы показываются в этой валюте. При смене валюты все записи пересчитаются по курсу ЦБ.</div></div>';
 }
 function themeCard(){
-  return '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + Object.keys(THEMES).map(function(k){ var th = THEMES[k]; return '<button class="th '+((P().theme || 'vio') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join('') + '</div>' +
-    '<label>Зимний вайб</label><div class="seg"><button class="'+(P().snow !== false ? 'on' : '')+'" data-act="snow" data-v="1">❄ Снегопад</button><button class="'+(P().snow === false ? 'on' : '')+'" data-act="snow" data-v="0">Без снега</button></div>' +
+  return '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + themeBtns(['dark', 'pink']) + '</div>' + (MORE_TH || ['dark', 'pink'].indexOf(P().theme || 'dark') < 0 ? '<div class="themes" style="margin-top:.5rem">' + themeBtns(Object.keys(THEMES).filter(function(k){ return k !== 'dark' && k !== 'pink'; })) + '</div>' : '<button class="btn ghost" style="margin-top:.6rem" data-act="moreth">Ещё темы</button>') +
+    '<label>Зимний вайб</label><div class="seg"><button class="'+(P().snow === true ? 'on' : '')+'" data-act="snow" data-v="1">❄ Снегопад</button><button class="'+(P().snow !== true ? 'on' : '')+'" data-act="snow" data-v="0">Без снега</button></div>' +
     '<label>Размер интерфейса</label><div class="seg">' + Object.keys(SCALES).map(function(k){ return '<button class="'+((P().scale || 'm') === k ? 'on' : '')+'" data-act="scale" data-v="'+k+'">'+SCALES[k].n+'</button>'; }).join('') + '</div></div>';
 }
+var MORE_TH = false;
+function themeBtns(keys){ return keys.map(function(k){ var th = THEMES[k]; return '<button class="th '+((P().theme || 'dark') === k ? 'on' : '')+'" data-act="theme" data-v="'+k+'"><i style="background:linear-gradient(135deg,'+th.a+','+th.b+')"></i>'+th.n+'</button>'; }).join(''); }
 function vSet(){
   return '<a class="backlink" data-act="backprof">‹ Профиль</a><div class="top"><div><div class="title">Настройки</div></div></div>' +
     '<div class="card set">' +
@@ -1310,7 +1312,7 @@ function capsSync(){
 }
 /* ===== Снегопад ===== */
 var SNOW = { cv: null, ctx: null, fl: [], on: false, raf: 0, w: 0, h: 0, dark: true, last: 0 };
-function snowWanted(){ try { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return false; } catch (e) {} return !(P() && P().snow === false); }
+function snowWanted(){ try { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return false; } catch (e) {} return !!(P() && P().snow === true); }
 function snowInit(){
   if (SNOW.cv) return;
   var c = document.createElement('canvas');
@@ -1754,6 +1756,7 @@ var ACT = {
   },
   stats: function(){ api('GET', '/api/admin/stats').then(statsSheet).catch(function(){ toast('Не удалось загрузить статистику'); }); },
   theme: function(d){ P().theme = d.v; markDirty('me'); haptic(); render(); },
+  moreth: function(){ MORE_TH = true; render(); },
   snow: function(d){ P().snow = d.v === '1'; markDirty('me'); haptic(); render(); },
   scale: function(d){ P().scale = d.v; markDirty('me'); haptic(); render(); },
   scope: function(d){ setScope(d.v); },
