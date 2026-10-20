@@ -462,14 +462,19 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .tog button.sw:after{content:"";position:absolute;top:.25rem;left:.25rem;width:1.5rem;height:1.5rem;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.35);transition:transform .22s ease}
 .tog button.sw.on{background:var(--green,#2fc596)}
 .tog button.sw.on:after{transform:translateX(1.5rem)}
-/* всё нажимаемое заметно: заливка акцентным цветом, как у «Изменить» */
-#app .btn.ghost:not(.danger){background:var(--btn);color:#fff;box-shadow:0 0 .6rem rgba(162,132,247,.45)}
-.plan.slim{background:var(--btn);color:#fff;box-shadow:0 0 .6rem rgba(162,132,247,.35)}
-.plan.slim span{color:rgba(255,255,255,.85)}
+/* иерархия кнопок: главная — яркая с градиентом, второстепенные — с контуром, «добавить» — зелёные, «навсегда» — золотая */
+#app .btn:not(.ghost):not(.danger){background:linear-gradient(135deg,var(--bal1),var(--bal2));color:#fff;box-shadow:0 .4rem 1.1rem rgba(var(--sh),.35),0 0 .9rem rgba(124,140,255,.35)}
+#app .btn.ghost:not(.danger){background:transparent;color:var(--pink-d);box-shadow:none;border:1.5px solid var(--pink)}
+#app .btn.ghost[data-act=newgoal],#app .btn.ghost[data-act=newdebt],#app .btn.ghost[data-act=newrec],#app .btn.ghost[data-act=newshift],#app .btn.ghost[data-act=newcat],#app .btn.ghost[data-act=invite]{background:rgba(47,197,150,.13);color:var(--green,#0f9d74);border-color:var(--green,#0f9d74)}
+#app .btn.ghost[data-act=pay][data-v=life]{background:rgba(255,194,77,.14);color:#d99200;border-color:#ffc24d}
+.plan.slim{background:var(--pink-l);color:var(--ink);box-shadow:none}
+.plan.slim>:first-child{flex:none;width:2.3rem!important;height:2.3rem!important;box-sizing:border-box;padding:.5rem;border-radius:.75rem;background:var(--btn);color:#fff}
+.plan.slim[data-act=stats]>:first-child{background:var(--green,#0f9d74)}
+.plan.slim[data-act=plan]>:first-child{background:#e69a00}
+.plan.slim span{color:var(--muted)}
 .chip[data-act=refuse]{background:var(--btn);color:#fff;font-weight:800}
 .tog:has(a[data-act=legal]){gap:.6rem}
-.tog a[data-act=legal]{flex:1;background:var(--btn);color:#fff!important;padding:.5rem .9rem;border-radius:.8rem;font-size:.9rem;text-align:center}
-
+.tog a[data-act=legal]{flex:1;background:transparent;color:var(--pink-d)!important;border:1.5px solid var(--pink);padding:.5rem .9rem;border-radius:.8rem;font-size:.9rem;text-align:center}
 </style>
 </head>
 <body>
