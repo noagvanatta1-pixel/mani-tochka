@@ -478,6 +478,7 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 /* быстрые категории: неоновые значки, как в сетке категорий */
 .chip[style*="--ch"]{border:1px solid hsl(var(--ch) 70% 60%/.32)}
 .chip[style*="--ch"] .ci{color:hsl(var(--ch) 80% 72%);background:hsl(var(--ch) 75% 55%/.28);border-radius:.5rem;box-shadow:0 0 10px hsl(var(--ch) 85% 60%/.35)}
+.chip.on[style*="--ch"] .ci{color:#fff;background:transparent;box-shadow:none}
 </style>
 </head>
 <body>
@@ -1454,7 +1455,7 @@ function openCat(id){
   var pr = PRESETS.filter(function(x){ return !have[x[0]]; });
   var quick = (!c && pr.length) ? '<label>Быстро добавить (нажмите на нужные)</label><div class="chips">' + pr.map(function(x, i){ return '<button class="chip" style="--ch:'+((i * 47 + 20) % 360)+'" data-act="addpreset" data-n="'+esc(x[0])+'" data-e="'+x[1]+'">'+ci(x[1],'sm')+' '+esc(x[0])+'</button>'; }).join('') + '</div>' : '';
   sheet('<h3>'+(c ? 'Категория' : 'Новая категория')+'</h3>'+quick+'<label>'+(c ? 'Название' : 'Или создайте свою · название')+'</label><input id="c-name" value="'+esc(c ? c.name : '')+'" placeholder="Например, Кафе">' +
-    '<label>Значок</label><input id="c-em" value="'+esc(pickedEmoji)+'" maxlength="4"><div class="chips" style="margin-top:0.625rem">' + EMOJIS.map(function(e){ return '<button class="chip" data-act="pickem" data-v="'+e+'" aria-label="'+e+'">'+ci(e)+'</button>'; }).join('') + '</div>' +
+    '<label>Значок</label><input id="c-em" value="'+esc(pickedEmoji)+'" maxlength="4"><div class="chips" style="margin-top:0.625rem">' + EMOJIS.map(function(e, i){ return '<button class="chip" style="--ch:'+((i * 47 + 20) % 360)+'" data-act="pickem" data-v="'+e+'" aria-label="'+e+'">'+ci(e)+'</button>'; }).join('') + '</div>' +
     '<label>Лимит в месяц, '+SYM()+'</label><input id="c-lim" inputmode="decimal" value="'+(c ? c.limit : '')+'" placeholder="0">' +
     '<button class="btn big" data-act="savecat">Сохранить</button>' + (c ? '<button class="btn danger big" style="margin-top:0.625rem" data-act="delcat" data-id="'+c.id+'">Удалить категорию</button>' : ''));
 }
