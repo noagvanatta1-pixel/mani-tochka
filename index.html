@@ -1174,7 +1174,7 @@ function vAn(){
 }
 
 function accountCard(){
-  if (!ONLINE) return '<div class="card set"><label style="margin-top:0">Режим без аккаунта</label><div class="hi" style="margin:0 0.25rem">Данные хранятся только на этом устройстве.</div></div>';
+  if (!ONLINE) return '<div class="card set"><label style="margin-top:0">Режим без аккаунта</label><div class="hi" style="margin:0 0.25rem">Данные хранятся только на этом устройстве. Войдите, чтобы они сохранялись на сервере и не пропадали.</div>' + (IN_TG ? '' : '<button class="btn big" style="margin-top:.8rem" data-act="weblogin">Войти или создать аккаунт</button>') + '</div>';
   var st = syncState === 'ok' ? '☁️ Данные сохраняются на сервере' : (syncState === 'offline' ? '⚠️ Нет связи с сервером — сохраню, как только появится' : 'Подключаюсь…');
   return '<div class="card set"><label style="margin-top:0">Аккаунт</label><div class="hi" style="margin:0 0.25rem 0.875rem"><b style="color:var(--ink)">'+esc(tgUser.first_name || 'Вы')+'</b><br>'+st+'</div>' +
     (BOT ? '<button class="btn ghost" data-act="invite">'+ic('plus',22)+' Позвать друзей</button>' : '') +
