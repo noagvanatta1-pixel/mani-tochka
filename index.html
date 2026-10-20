@@ -1727,6 +1727,8 @@ var ACT = {
   dismissal: function(d){ try { localStorage.setItem('kp_dis', d.sig); } catch (e) {} render(); },
   openbot: function(){ openTg('https://t.me/' + (BOT || 'TheSavedMoney_bot')); },
   weblogin: function(){ loginStart(); },
+  emaillogin: function(){ emailAuth('login'); },
+  emailreg: function(){ emailAuth('register'); },
   weblogout: function(){
     confirmBox('Выйти из аккаунта на этом устройстве? Ваши данные и подписка останутся на сервере, при входе всё вернётся.', function(){
       api('POST', '/api/web/logout', {}).catch(function(){}).then(function(){ webForget(false); });
@@ -1855,7 +1857,7 @@ document.addEventListener('click', function(e){
   var t = e.target.closest('[data-tab],[data-act],[data-close]'); if (!t) return;
   if (t.hasAttribute('data-close')) { backToPlan = backToCats = backToOp = false; opDraft = null; closeSheet(); return; }
   if (t.dataset.tab) { TAB = t.dataset.tab; window.scrollTo(0, 0); haptic('light'); render(); return; }
-  if (GATE && !OPEN_OK[t.dataset.act]) { loginStart(); return; }   // без входа любое действие просит войти через Telegram
+  if (GATE && !OPEN_OK[t.dataset.act]) { loginStart(); return; }   // без входа любое действие просит войти
   if (ACT[t.dataset.act]) ACT[t.dataset.act](t.dataset, t);
 });
 /* суммы с пробелами между тысячами: 90 000 */
@@ -2080,7 +2082,7 @@ function openPaywall(what){
 }
 function webBar(){
   if (IN_TG || ONLINE) return '';
-  return '<div class="webbar" data-act="weblogin"><div><b>Войдите через Telegram</b>Так сохранятся данные на всех устройствах и заработает оплата. Сейчас всё хранится только в этом браузере.</div><span>Войти</span></div>';
+  return '<div class="webbar" data-act="weblogin"><div><b>Войдите в Копилку</b>Так сохранятся данные на всех устройствах и заработает оплата. Сейчас всё хранится только в этом браузере.</div><span>Войти</span></div>';
 }
 function trialBar(){
   if (!ONLINE || !PLAN || !PLAN.paywall || PLAN.status !== 'trial' || PLAN.daysLeft > 3) return '';
@@ -2356,21 +2358,42 @@ function loadExtras(){
 /* ---------- Вход через Telegram вне Telegram ---------- */
 var LOGIN = null;
 var GATE = false;   // вне Telegram без входа: пользоваться можно только после входа
-var OPEN_OK = {weblogin: 1, openbot: 1, opensettings: 1, dismissal: 1, legal: 1, support: 1};
+var OPEN_OK = {weblogin: 1, emaillogin: 1, emailreg: 1, openbot: 1, opensettings: 1, dismissal: 1, legal: 1, support: 1};
 function webForget(reload){
   try { localStorage.removeItem('kp_web'); } catch(e){}
   WS = null;
   if (reload) { toast('Нужно войти заново'); setTimeout(function(){ location.reload(); }, 900); } else location.reload();
 }
 function loginStop(){ if (LOGIN) { clearTimeout(LOGIN.t); LOGIN.dead = true; } LOGIN = null; }
+var EAUTH = false;
 function loginSheet(st){
-  var L = LOGIN; if (!L) return;
-  var body = st === 'denied' ? '<div class="hi" style="margin:.2rem .25rem">Вход отменён в Telegram.</div>' :
-    st === 'expired' ? '<div class="hi" style="margin:.2rem .25rem">Время вышло. Нажмите «Войти» ещё раз.</div>' :
-    (GATE ? '<div class="hi" style="margin:.2rem .25rem .8rem">Чтобы пользоваться Копилкой, войдите через Telegram: так ваши данные сохранятся и не пропадут.</div>' : '') +
-    '<div class="hi" style="margin:.2rem .25rem .6rem;font-weight:600">1. Нажмите «Открыть Telegram».<br>2. В боте нажмите «Подтвердить вход».<br>3. Вернитесь сюда: вход произойдёт сам.</div>' +
-    '<a class="btn big" href="' + esc(L.link) + '" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Открыть Telegram</a>';
-  sheet('<h3>Войдите через Telegram</h3>' + body);
+  var L = st ? null : LOGIN;
+  var note = st === 'denied' ? '<div class="hi" style="margin:.2rem .25rem .6rem">Вход отменён в Telegram.</div>' :
+    st === 'expired' ? '<div class="hi" style="margin:.2rem .25rem .6rem">Время вышло. Нажмите «Войти через Telegram» ещё раз.</div>' : '';
+  var tgPart = L ?
+    '<a class="btn ghost" href="' + esc(L.link) + '" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Войти через Telegram</a>' +
+    '<div class="hi" style="margin:.5rem .25rem 0;font-size:.82rem;font-weight:600">В боте нажмите «Подтвердить вход» и вернитесь сюда: вход произойдёт сам.</div>' :
+    '<button class="btn ghost" data-act="weblogin">Войти через Telegram</button>';
+  sheet('<h3>Вход в Копилку</h3>' + note +
+    (GATE ? '<div class="hi" style="margin:.2rem .25rem .8rem">Войдите, чтобы ваши данные сохранялись и не пропадали.</div>' : '') +
+    '<label style="margin-top:0">Почта</label><input class="f" id="lg-email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="name@example.com">' +
+    '<label>Пароль (от 8 символов)</label><input class="f" id="lg-pass" type="password" autocomplete="current-password" placeholder="Пароль">' +
+    '<button class="btn ghost" style="margin-top:.6rem" data-act="emailreg">Создать аккаунт</button>' +
+    '<div class="hi" style="margin:.5rem .25rem 0;font-size:.82rem;font-weight:600">Забыли пароль? Напишите в поддержку: @Noagvanatta1</div>' +
+    '<div class="hi" style="text-align:center;margin:.9rem 0 .6rem;font-weight:600">или</div>' + tgPart +
+    '<button class="btn big" data-act="emaillogin">Войти</button>');
+}
+function emailAuth(kind){
+  var em = $('#lg-email'), pw = $('#lg-pass'); if (!em || !pw || EAUTH) return;
+  var email = em.value.trim(), password = pw.value;
+  if (!email || !password) { toast('Введите почту и пароль'); return; }
+  EAUTH = true;
+  fetch('/api/web/auth/' + kind, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({email: email, password: password})})
+    .then(function(r){ return r.json().then(function(j){ if (!r.ok) throw Object.assign(new Error(j.error || ''), {srv: true}); return j; }); })
+    .then(function(r){
+      try { localStorage.setItem('kp_web', JSON.stringify({token: r.token, id: r.user.id, name: r.user.first_name || ''})); } catch(e){}
+      loginStop(); toast('Вход выполнен'); setTimeout(function(){ location.reload(); }, 500);
+    }).catch(function(e){ EAUTH = false; toast(e && e.srv && e.message ? e.message : 'Не удалось войти. Проверьте связь и попробуйте позже'); });
 }
 function loginPoll(){
   var L = LOGIN; if (!L || L.dead) return;
@@ -2393,7 +2416,7 @@ function loginStart(){
     .then(function(r){
       LOGIN = {id: r.id, secret: r.secret, link: r.link, dead: false, t: 0};
       loginSheet(); loginPoll();
-    }).catch(function(){ toast('Вход сейчас недоступен. Попробуйте позже'); });
+    }).catch(function(){ LOGIN = null; loginSheet(); });
 }
 document.addEventListener('visibilitychange', function(){ if (!document.hidden && LOGIN) { clearTimeout(LOGIN.t); loginPoll(); } });
 function boot(){

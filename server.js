@@ -324,6 +324,54 @@ function liveLogin(id) {
   return e;
 }
 
+/* ---------- Вход по почте и паролю (без Telegram) ----------
+   Нужен для магазинов приложений: войти можно не только через мессенджер.
+   Пароль хранится только в виде scrypt-хеша с солью. Номера таких пользователей начинаются с EMAIL_UID_BASE,
+   чтобы не пересекаться с id из Telegram. Писать им через бота нельзя, поэтому напоминания им не шлём. */
+const EMAIL_UID_BASE = 1e12;
+db.exec(`CREATE TABLE IF NOT EXISTS accounts (
+  email TEXT PRIMARY KEY, uid INTEGER NOT NULL UNIQUE, salt TEXT NOT NULL, hash TEXT NOT NULL, created_at INTEGER NOT NULL
+)`);
+const qa = {
+  byEmail: db.prepare('SELECT email, uid, salt, hash FROM accounts WHERE email = ?'),
+  maxUid: db.prepare('SELECT COALESCE(MAX(uid), ?) AS m FROM accounts'),
+  ins: db.prepare('INSERT INTO accounts (email, uid, salt, hash, created_at) VALUES (?, ?, ?, ?, ?)'),
+  delByUid: db.prepare('DELETE FROM accounts WHERE uid = ?'),
+};
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
+const emailFails = new Map();   // почта -> { n, reset }: защита от подбора пароля
+function scryptHex(password, saltHex) {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(String(password), Buffer.from(saltHex, 'hex'), 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, (err, key) => (err ? reject(err) : resolve(key.toString('hex'))));
+  });
+}
+function emailBlocked(email) {
+  const t = Date.now(), r = emailFails.get(email);
+  if (r && t > r.reset) { emailFails.delete(email); return false; }
+  return !!r && r.n >= 8;
+}
+function emailFail(email) {
+  const t = Date.now();
+  let r = emailFails.get(email);
+  if (!r || t > r.reset) { r = { n: 0, reset: t + 15 * 60000 }; emailFails.set(email, r); }
+  r.n++;
+}
+setInterval(() => { const t = Date.now(); for (const [k, v] of emailFails) if (t > v.reset) emailFails.delete(k); }, 5 * 60000).unref();
+function readCreds(b) {
+  const email = String(b && b.email || '').trim().toLowerCase(), password = String(b && b.password || '');
+  if (email.length > 254 || !EMAIL_RE.test(email)) throw httpError(400, 'Введите правильную почту');
+  if (password.length < 8) throw httpError(400, 'Пароль должен быть не короче 8 символов');
+  if (password.length > 128) throw httpError(400, 'Пароль слишком длинный');
+  return { email, password };
+}
+function openWebSession(uid, name) {
+  const token = crypto.randomBytes(32).toString('hex'), t = Date.now();
+  q.upsertUser.run(uid, name, t, t);
+  onUserTouched(uid, t);
+  q.sessIns.run(sha256hex(token), uid, t, t);
+  return { status: 'ok', token, user: { id: uid, first_name: name } };
+}
+
 /* ---------- Вспомогательное ---------- */
 const seen = new Map();   // user id -> когда последний раз обновляли last_seen
 const rates = new Map();  // user id -> { n, reset }
@@ -556,7 +604,30 @@ async function handleApi(req, res, url) {
     if (id && YK_ON) await ykCheck(id).catch((e) => console.error('ЮKassa webhook:', e.message));
     return json(res, 200, { ok: true });
   }
-  if (url.pathname === '/api/web/login/available' && req.method === 'GET') return json(res, 200, { ok: !!(BOT_TOKEN && BOT_NAME) });
+  if (url.pathname === '/api/web/login/available' && req.method === 'GET') return json(res, 200, { ok: true, tg: !!(BOT_TOKEN && BOT_NAME), email: true });
+  if (url.pathname === '/api/web/auth/register' && req.method === 'POST') {
+    loginLimit(req, 'reg', 10);
+    const { email, password } = readCreds(await readJson(req, 1024));
+    if (qa.byEmail.get(email)) throw httpError(409, 'Эта почта уже зарегистрирована. Нажмите «Войти»');
+    const salt = crypto.randomBytes(16).toString('hex'), hash = await scryptHex(password, salt);
+    const name = email.split('@')[0].slice(0, 32);
+    let uid;
+    try {
+      tx(() => { uid = qa.maxUid.get(EMAIL_UID_BASE).m + 1; qa.ins.run(email, uid, salt, hash, Date.now()); });
+    } catch (_) { throw httpError(409, 'Эта почта уже зарегистрирована. Нажмите «Войти»'); }
+    return json(res, 200, openWebSession(uid, name));
+  }
+  if (url.pathname === '/api/web/auth/login' && req.method === 'POST') {
+    loginLimit(req, 'login', 30);
+    const { email, password } = readCreds(await readJson(req, 1024));
+    if (emailBlocked(email)) throw httpError(429, 'Слишком много попыток. Подождите 15 минут');
+    const acc = qa.byEmail.get(email), bad = () => { emailFail(email); return httpError(401, 'Неверная почта или пароль'); };
+    if (!acc) { await scryptHex(password, '00'.repeat(16)); throw bad(); }
+    const hash = await scryptHex(password, acc.salt);
+    if (!sameHex(hash, acc.hash)) throw bad();
+    emailFails.delete(email);
+    return json(res, 200, openWebSession(acc.uid, email.split('@')[0].slice(0, 32)));
+  }
   if (url.pathname === '/api/web/login/start' && req.method === 'POST') {
     if (!BOT_TOKEN || !BOT_NAME) throw httpError(503, 'login unavailable');
     loginLimit(req, 'start', 20);
@@ -752,7 +823,7 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/account' && m === 'DELETE') {
     leaveFamily(user.id);
-    tx(() => { q.delImages.run(user.id); q.delState.run(user.id); q.delPrefs.run(user.id); q.delRefs.run(user.id, user.id); q.delRefCode.run(user.id); q.sessDelUser.run(user.id); q.delUser.run(user.id); });
+    tx(() => { q.delImages.run(user.id); q.delState.run(user.id); q.delPrefs.run(user.id); q.delRefs.run(user.id, user.id); q.delRefCode.run(user.id); q.sessDelUser.run(user.id); q.delUser.run(user.id); qa.delByUid.run(user.id); });
     seen.delete(user.id);
     return json(res, 200, { ok: true });
   }
@@ -1237,6 +1308,7 @@ async function sendReminders(ignoreHour) {
   if (!BOT_NAME || !BOT_TOKEN) return;
   for (const r of q.remindList.all()) {
     try {
+      if (r.user_id >= EMAIL_UID_BASE) continue;   // вход по почте: в Telegram писать некуда
       const lp = localParts(r.tz);
       if (!ignoreHour && (lp.hour < r.hour || lp.hour > r.hour + 3)) continue;
       const st = loadState(r.user_id).state;
@@ -1281,6 +1353,7 @@ async function sendTrialNudges() {
   const now = Date.now(), DAY = 86400000;
   for (const u of q.trialCandidates.all(OWNER_ID)) {
     try {
+      if (u.id >= EMAIL_UID_BASE) continue;
       const left = u.created_at + TRIAL_DAYS * DAY - now;
       if (left <= 0 || left > DAY) continue;
       if (hasPremium(u.id)) continue;
