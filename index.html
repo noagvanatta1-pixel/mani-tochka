@@ -1394,11 +1394,12 @@ function updFx(){
   box.style.display = 'flex';
   var cv = $('#f-conv'); if (cv) cv.textContent = a > 0 && r > 0 ? '≈ ' + fmt(a * r) : (r > 0 ? '' : 'укажите курс');
 }
-function openOp(catId){
+function openOp(catId, keepSwitch){
   opType = 'expense'; opCur = baseCode(); opCat = (catId && catById(catId)) ? catId : (S.cats[0] ? S.cats[0].id : '');
   var d = isCur() ? today() : mk(VM.y, VM.m) + '-01';
+  var fromCat = !keepSwitch && !!(catId && catById(catId));   // открыли с карточки категории: это всегда расход, переключатель не нужен
   sheet('<h3>Новая операция</h3>' +
-    '<div class="seg"><button class="on" data-act="optype" data-v="expense">Расход</button><button data-act="optype" data-v="income">Доход</button></div>' +
+    (fromCat ? '' : '<div class="seg"><button class="on" data-act="optype" data-v="expense">Расход</button><button data-act="optype" data-v="income">Доход</button></div>') +
     '<div class="amtbox"><input id="f-amt" inputmode="decimal" placeholder="0" autocomplete="off"><span id="f-sym">'+SYM()+'</span></div>' + curRow() + recentChips() +
     '<div id="f-cats"><label>Категория</label><div class="cgrid">' + S.cats.map(function(c){ return '<button class="cg '+(c.id === opCat ? 'on' : '')+'" style="--ch:'+((S.cats.indexOf(c) * 47 + 20) % 360)+'" data-act="opcat" data-id="'+c.id+'"><b>'+ci(c.emoji)+'</b>'+esc(c.name)+'</button>'; }).join('') + '<button class="cg add" data-act="opnewcat"><b>+</b>Своя</button></div></div>' +
     '<label>Комментарий</label><input id="f-note" placeholder="Необязательно" autocomplete="off">' +
@@ -1425,7 +1426,7 @@ function commitPlan(){
 function afterCat(){
   var bp = backToPlan, bc = backToCats, bo = backToOp; backToPlan = backToCats = backToOp = false;
   closeSheet(); render();
-  if (bp) setTimeout(openPlan, 120); else if (bc) setTimeout(openCats, 120); else if (bo) setTimeout(function(){ openOp(lastCatId); }, 120);
+  if (bp) setTimeout(openPlan, 120); else if (bc) setTimeout(openCats, 120); else if (bo) setTimeout(function(){ openOp(lastCatId, true); }, 120);
 }
 function openPlan(){
   var k = curKey();
