@@ -457,6 +457,19 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 #garland .b.c1{animation-delay:.3s}#garland .b.c2{animation-delay:.9s}#garland .b.c3{animation-delay:1.4s}
 @keyframes gtw{0%,100%{opacity:.45}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){#garland .b{animation:none}}
+/* переключатели: зелёный — включено, красный — выключено, белый шарик скользит */
+.tog button.sw{position:relative;flex:none;width:3.5rem;height:2rem;padding:0;border-radius:1rem;background:var(--red,#e5484d);color:transparent;font-size:0;transition:background-color .22s ease}
+.tog button.sw:after{content:"";position:absolute;top:.25rem;left:.25rem;width:1.5rem;height:1.5rem;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.35);transition:transform .22s ease}
+.tog button.sw.on{background:var(--green,#2fc596)}
+.tog button.sw.on:after{transform:translateX(1.5rem)}
+/* всё нажимаемое заметно: заливка акцентным цветом, как у «Изменить» */
+#app .btn.ghost:not(.danger){background:var(--btn);color:#fff;box-shadow:0 0 .6rem rgba(162,132,247,.45)}
+.plan.slim{background:var(--btn);color:#fff;box-shadow:0 0 .6rem rgba(162,132,247,.35)}
+.plan.slim span{color:rgba(255,255,255,.85)}
+.chip[data-act=refuse]{background:var(--btn);color:#fff;font-weight:800}
+.tog:has(a[data-act=legal]){gap:.6rem}
+.tog a[data-act=legal]{flex:1;background:var(--btn);color:#fff!important;padding:.5rem .9rem;border-radius:.8rem;font-size:.9rem;text-align:center}
+
 </style>
 </head>
 <body>
@@ -1766,7 +1779,8 @@ var ACT = {
       }).catch(function(){ toast('Не удалось выйти'); });
     });
   },
-  remtog: function(d){ if (!PREFS[d.k] && gate('Напоминания в боте')) return; PREFS[d.k] = !PREFS[d.k]; savePrefs(); render(); },
+  remtog: function(d, el){ if (!PREFS[d.k] && gate('Напоминания в боте')) return; PREFS[d.k] = !PREFS[d.k]; savePrefs(); haptic('light');
+    if (el && el.classList) { el.classList.toggle('on', !!PREFS[d.k]); el.setAttribute('aria-checked', PREFS[d.k] ? 'true' : 'false'); setTimeout(render, 230); } else render(); },
   remhour: function(d){ PREFS.hour = Number(d.v); savePrefs(); render(); },
   spentlist: function(){ spentSheet(); },
   inclist: function(){ incomeSheet(); },
@@ -2157,10 +2171,10 @@ function remindCard(){
   if (!ONLINE) return '';
   var hrs = [9, 12, 18, 20, 21];
   return '<div class="card set"><label style="margin-top:0">Напоминания в боте</label>' +
-    '<div class="tog"><span>Если не записали траты за день</span><button class="'+(PREFS.remind ? 'on' : '')+'" data-act="remtog" data-k="remind">'+(PREFS.remind ? 'Вкл' : 'Выкл')+'</button></div>' +
-    '<div class="tog"><span>Итоги недели по понедельникам</span><button class="'+(PREFS.weekly ? 'on' : '')+'" data-act="remtog" data-k="weekly">'+(PREFS.weekly ? 'Вкл' : 'Выкл')+'</button></div>' +
-    '<div class="tog"><span>Платёж завтра: напомнить заранее</span><button class="'+(PREFS.bills ? 'on' : '')+'" data-act="remtog" data-k="bills">'+(PREFS.bills ? 'Вкл' : 'Выкл')+'</button></div>' +
-    '<div class="tog"><span>Итоги месяца 1-го числа</span><button class="'+(PREFS.monthly ? 'on' : '')+'" data-act="remtog" data-k="monthly">'+(PREFS.monthly ? 'Вкл' : 'Выкл')+'</button></div>' +
+    '<div class="tog"><span>Если не записали траты за день</span><button class="sw '+(PREFS.remind ? 'on' : '')+'" role="switch" aria-checked="'+(PREFS.remind ? 'true' : 'false')+'" aria-label="'+(PREFS.remind ? 'Включено' : 'Выключено')+'" data-act="remtog" data-k="remind"></button></div>' +
+    '<div class="tog"><span>Итоги недели по понедельникам</span><button class="sw '+(PREFS.weekly ? 'on' : '')+'" role="switch" aria-checked="'+(PREFS.weekly ? 'true' : 'false')+'" aria-label="'+(PREFS.weekly ? 'Включено' : 'Выключено')+'" data-act="remtog" data-k="weekly"></button></div>' +
+    '<div class="tog"><span>Платёж завтра: напомнить заранее</span><button class="sw '+(PREFS.bills ? 'on' : '')+'" role="switch" aria-checked="'+(PREFS.bills ? 'true' : 'false')+'" aria-label="'+(PREFS.bills ? 'Включено' : 'Выключено')+'" data-act="remtog" data-k="bills"></button></div>' +
+    '<div class="tog"><span>Итоги месяца 1-го числа</span><button class="sw '+(PREFS.monthly ? 'on' : '')+'" role="switch" aria-checked="'+(PREFS.monthly ? 'true' : 'false')+'" aria-label="'+(PREFS.monthly ? 'Включено' : 'Выключено')+'" data-act="remtog" data-k="monthly"></button></div>' +
     '<label>Во сколько присылать</label><div class="chips">' + hrs.map(function(h){ return '<button class="chip '+(PREFS.hour === h ? 'on' : '')+'" data-act="remhour" data-v="'+h+'">'+h+':00</button>'; }).join('') + '</div>' +
     '<div class="hi" style="margin:.7rem .25rem 0;font-size:.8rem;font-weight:600">Чтобы сообщения приходили, нажмите «Start» в чате с ботом.</div></div>';
 }
