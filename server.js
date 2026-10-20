@@ -488,7 +488,8 @@ function planInfo(uid) {
     fullMonth: PRICE_MONTH, fullYear: PRICE_YEAR, fullLife: PRICE_LIFE, discount: disc,
     pay: PAY_URL ? PAY_URL.replace('{uid}', String(uid)) : '', support: SUPPORT_TG,
     owner: uid === OWNER_ID,
-    card: !!(BOT_TOKEN && BOT_NAME && YK_TOKEN), sbp: YK_ON, stars: !!(BOT_TOKEN && BOT_NAME), starsMonth: Math.round(STARS_MONTH * k), starsYear: Math.round(STARS_YEAR * k), starsLife: Math.round(STARS_LIFE * k),
+    /* аккаунт по почте (без Telegram): только оплата на странице ЮKassa, без счетов в Telegram */
+    card: uid < EMAIL_UID_BASE && !!(BOT_TOKEN && BOT_NAME && YK_TOKEN), sbp: YK_ON, stars: uid < EMAIL_UID_BASE && !!(BOT_TOKEN && BOT_NAME), starsMonth: Math.round(STARS_MONTH * k), starsYear: Math.round(STARS_YEAR * k), starsLife: Math.round(STARS_LIFE * k),
   };
 }
 
@@ -706,7 +707,7 @@ async function handleApi(req, res, url) {
     const pm = planMeta(plan, planInfo(user.id));
     const r = await ykApi('POST', '/payments', {
       amount: { value: pm.rub + '.00', currency: 'RUB' }, capture: true,
-      confirmation: { type: 'redirect', return_url: BOT_NAME ? 'https://t.me/' + BOT_NAME : (APP_URL || 'https://t.me') },
+      confirmation: { type: 'redirect', return_url: (user.id >= EMAIL_UID_BASE || !BOT_NAME) ? (APP_URL || 'https://kopilka.website') : 'https://t.me/' + BOT_NAME },
       description: (pm.title + ' (id ' + user.id + ')').slice(0, 128),
       metadata: { uid: String(user.id), plan },
     }, crypto.randomUUID()).catch((e) => { console.error('ЮKassa: создание платежа:', e.message); return null; });
