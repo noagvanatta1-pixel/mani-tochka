@@ -97,7 +97,9 @@ db.exec(`
     PRIMARY KEY (user_id, goal_id)
   );
 `);
-for (const col of ['bills INTEGER NOT NULL DEFAULT 0', 'monthly INTEGER NOT NULL DEFAULT 0', "last_bills TEXT NOT NULL DEFAULT ''", "last_month TEXT NOT NULL DEFAULT ''"]) {
+for (const col of ['bills INTEGER NOT NULL DEFAULT 0', 'monthly INTEGER NOT NULL DEFAULT 0', "last_bills TEXT NOT NULL DEFAULT ''", "last_month TEXT NOT NULL DEFAULT ''",
+  'goals INTEGER NOT NULL DEFAULT 0', 'limits INTEGER NOT NULL DEFAULT 0', 'debts INTEGER NOT NULL DEFAULT 0',
+  "last_goal TEXT NOT NULL DEFAULT ''", "last_lim TEXT NOT NULL DEFAULT ''", "last_debts TEXT NOT NULL DEFAULT ''"]) {
   try { db.exec('ALTER TABLE prefs ADD COLUMN ' + col); } catch (_) { /* колонка уже есть */ }
 }
 
@@ -147,11 +149,11 @@ const q = {
   userCreated: db.prepare('SELECT created_at FROM users WHERE id = ?'),
   putPremium: db.prepare(`INSERT INTO premium (user_id, until) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET until = excluded.until`),
   famPremium: db.prepare(`SELECT MAX(p.until) AS until FROM premium p JOIN members m ON m.user_id = p.user_id WHERE m.family_id = ?`),
-  getPrefs: db.prepare('SELECT remind, weekly, bills, monthly, hour, tz FROM prefs WHERE user_id = ?'),
-  putPrefs: db.prepare(`INSERT INTO prefs (user_id, remind, weekly, bills, monthly, hour, tz) VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET remind = excluded.remind, weekly = excluded.weekly, bills = excluded.bills, monthly = excluded.monthly, hour = excluded.hour, tz = excluded.tz`),
+  getPrefs: db.prepare('SELECT remind, weekly, bills, monthly, goals, limits, debts, hour, tz FROM prefs WHERE user_id = ?'),
+  putPrefs: db.prepare(`INSERT INTO prefs (user_id, remind, weekly, bills, monthly, goals, limits, debts, hour, tz) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET remind = excluded.remind, weekly = excluded.weekly, bills = excluded.bills, monthly = excluded.monthly, goals = excluded.goals, limits = excluded.limits, debts = excluded.debts, hour = excluded.hour, tz = excluded.tz`),
   delPrefs: db.prepare('DELETE FROM prefs WHERE user_id = ?'),
-  remindList: db.prepare('SELECT user_id, remind, weekly, bills, monthly, hour, tz, last_sent, last_week, last_bills, last_month FROM prefs WHERE remind = 1 OR weekly = 1 OR bills = 1 OR monthly = 1'),
+  remindList: db.prepare('SELECT user_id, remind, weekly, bills, monthly, goals, limits, debts, hour, tz, last_sent, last_week, last_bills, last_month, last_goal, last_lim, last_debts FROM prefs WHERE remind = 1 OR weekly = 1 OR bills = 1 OR monthly = 1 OR goals = 1 OR limits = 1 OR debts = 1'),
   refCodeOf: db.prepare('SELECT code FROM refcodes WHERE user_id = ?'),
   refByCode: db.prepare('SELECT user_id FROM refcodes WHERE code = ?'),
   insRefCode: db.prepare('INSERT INTO refcodes (user_id, code) VALUES (?, ?)'),
@@ -166,8 +168,11 @@ const q = {
   markSent: db.prepare('UPDATE prefs SET last_sent = ? WHERE user_id = ?'),
   markBills: db.prepare('UPDATE prefs SET last_bills = ? WHERE user_id = ?'),
   markMonth: db.prepare('UPDATE prefs SET last_month = ? WHERE user_id = ?'),
+  markGoal: db.prepare('UPDATE prefs SET last_goal = ? WHERE user_id = ?'),
+  markLim: db.prepare('UPDATE prefs SET last_lim = ? WHERE user_id = ?'),
+  markDebts: db.prepare('UPDATE prefs SET last_debts = ? WHERE user_id = ?'),
   /* новому пользователю сразу включаем вечернее напоминание (отключается кнопкой в самом сообщении или в настройках) */
-  defPrefs: db.prepare('INSERT OR IGNORE INTO prefs (user_id, remind, weekly, bills, monthly, hour, tz) VALUES (?, 1, 0, 0, 0, 20, 180)'),
+  defPrefs: db.prepare('INSERT OR IGNORE INTO prefs (user_id, remind, weekly, bills, monthly, goals, limits, debts, hour, tz) VALUES (?, 1, 1, 1, 1, 1, 1, 1, 20, 180)'),
   remindOff: db.prepare('UPDATE prefs SET remind = 0 WHERE user_id = ?'),
   trialCandidates: db.prepare(`SELECT u.id AS id, u.created_at AS created_at, COALESCE(p.tz, 180) AS tz
     FROM users u LEFT JOIN prefs p ON p.user_id = u.id LEFT JOIN nudges n ON n.user_id = u.id
@@ -823,15 +828,15 @@ async function handleApi(req, res, url) {
 
   /* напоминания */
   if (p === '/api/prefs' && m === 'GET') {
-    const r = q.getPrefs.get(user.id) || { remind: 0, weekly: 0, bills: 0, monthly: 0, hour: 20, tz: 180 };
-    return json(res, 200, { remind: !!r.remind, weekly: !!r.weekly, bills: !!r.bills, monthly: !!r.monthly, hour: r.hour, tz: r.tz });
+    const r = q.getPrefs.get(user.id) || { remind: 0, weekly: 0, bills: 0, monthly: 0, goals: 0, limits: 0, debts: 0, hour: 20, tz: 180 };
+    return json(res, 200, { remind: !!r.remind, weekly: !!r.weekly, bills: !!r.bills, monthly: !!r.monthly, goals: !!r.goals, limits: !!r.limits, debts: !!r.debts, hour: r.hour, tz: r.tz });
   }
   if (p === '/api/prefs' && m === 'PUT') {
     const b = await readJson(req, 1024);
     const hour = Math.min(23, Math.max(0, Math.round(Number(b && b.hour))));
     const tz = Math.min(840, Math.max(-720, Math.round(Number(b && b.tz))));
     touch(user);
-    q.putPrefs.run(user.id, b && b.remind ? 1 : 0, b && b.weekly ? 1 : 0, b && b.bills ? 1 : 0, b && b.monthly ? 1 : 0, Number.isFinite(hour) ? hour : 20, Number.isFinite(tz) ? tz : 180);
+    q.putPrefs.run(user.id, b && b.remind ? 1 : 0, b && b.weekly ? 1 : 0, b && b.bills ? 1 : 0, b && b.monthly ? 1 : 0, b && b.goals ? 1 : 0, b && b.limits ? 1 : 0, b && b.debts ? 1 : 0, Number.isFinite(hour) ? hour : 20, Number.isFinite(tz) ? tz : 180);
     return json(res, 200, { ok: true });
   }
 
@@ -1366,6 +1371,46 @@ function monthlyText(st, tz) {
   if (saved) t += `\nОтложено в цели: ${money(saved, st)}`;
   return t;
 }
+/* лимиты категорий: предупреждаем при 80% и при превышении, один раз на категорию в месяц */
+function limitAlerts(st, tz, doneRaw) {
+  const lp = localParts(tz), mk = lp.day.slice(0, 7);
+  let done = {}; try { done = JSON.parse(doneRaw || '{}') || {}; } catch (_) { done = {}; }
+  for (const k of Object.keys(done)) if (!k.endsWith(':' + mk)) delete done[k];
+  const spent = new Map();
+  for (const o of st.ops || []) if (o.type === 'expense' && String(o.date).slice(0, 7) === mk) spent.set(o.catId, (spent.get(o.catId) || 0) + o.amount);
+  const lines = [];
+  for (const c of st.cats || []) {
+    if (!(c.limit > 0)) continue;
+    const sp = spent.get(c.id) || 0, pct = sp / c.limit * 100;
+    const lvl = pct >= 100 ? 100 : (pct >= 80 ? 80 : 0);
+    if (!lvl) continue;
+    if (lvl === 100 && !done[`${c.id}:100:${mk}`]) { lines.push(`🔴 ${c.emoji} ${c.name}: лимит превышен, потрачено ${money(sp, st)} из ${money(c.limit, st)}`); done[`${c.id}:100:${mk}`] = 1; done[`${c.id}:80:${mk}`] = 1; }
+    else if (lvl === 80 && !done[`${c.id}:80:${mk}`]) { lines.push(`🟡 ${c.emoji} ${c.name}: потрачено ${Math.round(pct)}% лимита (${money(sp, st)} из ${money(c.limit, st)})`); done[`${c.id}:80:${mk}`] = 1; }
+  }
+  return { text: lines.length ? 'Лимиты категорий\n' + lines.join('\n') : '', done: JSON.stringify(done) };
+}
+/* цель: раз в неделю (по воскресеньям) напоминаем про главную незаконченную цель */
+function goalText(st) {
+  const saved = (g) => (g.contribs || []).reduce((a, c) => a + c.amount, 0);
+  const open = (st.goals || []).filter((g) => g.target > 0 && saved(g) < g.target);
+  if (!open.length) return '';
+  const g = open.find((x) => x.id === st.mainGoal) || open[0], sv = saved(g);
+  return `Ваша цель «${g.name}» 🎯\nОтложено ${money(sv, st)} из ${money(g.target, st)} (${Math.round(sv / g.target * 100)}%). Осталось ${money(g.target - sv, st)}.\nПополните цель хотя бы немного 👇`;
+}
+/* долги: срок возврата наступил или прошёл (повтор раз в 3 дня) */
+function debtAlerts(st, tz) {
+  const today = localParts(tz).day, lines = [];
+  const dn = (d) => Math.round((Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10))) / 86400000);
+  for (const x of st.debts || []) {
+    if (x.kind !== 'owed' || !x.due) continue;
+    const left = x.total - (x.payments || []).reduce((a, p) => a + p.amount, 0);
+    if (left <= 0) continue;
+    const late = dn(today) - dn(x.due);
+    if (late === 0) lines.push(`• ${x.name}: срок возврата сегодня, ${money(left, st)}`);
+    else if (late > 0 && late % 3 === 0) lines.push(`• ${x.name}: просрочено на ${late} дн., ${money(left, st)}`);
+  }
+  return lines.length ? 'Долги вам 💸\n' + lines.join('\n') : '';
+}
 async function sendReminders(ignoreHour) {
   if (!BOT_NAME || !BOT_TOKEN) return;
   for (const r of q.remindList.all()) {
@@ -1399,6 +1444,30 @@ async function sendReminders(ignoreHour) {
         if (txt) {
           const resp = await tgApi('sendMessage', { chat_id: r.user_id, text: txt, reply_markup: openButton() }, 10000);
           if (!resp.ok) q.markMonth.run('', r.user_id);
+        }
+      }
+      if (r.limits && r.last_lim !== undefined) {
+        const la = limitAlerts(st, r.tz, r.last_lim);
+        if (la.text) {
+          q.markLim.run(la.done, r.user_id);
+          const resp = await tgApi('sendMessage', { chat_id: r.user_id, text: la.text, reply_markup: openButton() }, 10000);
+          if (!resp.ok) q.markLim.run(r.last_lim, r.user_id);
+        }
+      }
+      if (r.goals && lp.dow === 0 && r.last_goal !== lp.day) {
+        q.markGoal.run(lp.day, r.user_id);
+        const txt = goalText(st);
+        if (txt) {
+          const resp = await tgApi('sendMessage', { chat_id: r.user_id, text: txt, reply_markup: openButton() }, 10000);
+          if (!resp.ok) q.markGoal.run('', r.user_id);
+        }
+      }
+      if (r.debts && r.last_debts !== lp.day) {
+        q.markDebts.run(lp.day, r.user_id);
+        const txt = debtAlerts(st, r.tz);
+        if (txt) {
+          const resp = await tgApi('sendMessage', { chat_id: r.user_id, text: txt, reply_markup: openButton() }, 10000);
+          if (!resp.ok) q.markDebts.run('', r.user_id);
         }
       }
       if (r.weekly && lp.dow === 1 && r.last_week !== lp.day) {
