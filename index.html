@@ -1122,27 +1122,28 @@ function personCard(d){
 function vDebt(){
   var list = S.debts || [];
   var h = '<div class="top"><div><div class="title">Долги</div><div class="hi" style="margin-top:0.25rem">Кредиты, долги и кто что должен</div></div></div>';
-  var by = {loan: [], owe: [], owed: []};
-  list.forEach(function(d){ (d.kind === 'owed' ? by.owed : by.loan).push(d); });
+  var by = {loan: [], owe: [], owed: [], done: []};
+  list.forEach(function(d){ (debtLeft(d) <= 0 ? by.done : (d.kind === 'owed' ? by.owed : by.loan)).push(d); });
   if (!DTAB || !by[DTAB]) DTAB = by.loan.length ? 'loan' : (by.owed.length ? 'owed' : 'loan');
-  var names = {loan: 'Кредиты', owe: 'Я должен', owed: 'Мне должны'};
-  h += '<div class="seg dseg">' + ['loan', 'owed'].map(function(k){
+  var names = {loan: 'Кредиты', owe: 'Я должен', owed: 'Мне должны', done: 'Закрытые'};
+  h += '<div class="seg dseg">' + ['loan', 'owed', 'done'].map(function(k){
     return '<button class="' + (k === DTAB ? 'on' : '') + '" data-act="dtab" data-v="' + k + '">' + names[k] + (by[k].length ? ' <i>' + by[k].length + '</i>' : '') + '</button>'; }).join('') + '</div>';
   var cur = by[DTAB], tot = sum(cur.map(debtLeft)), act = cur.filter(function(d){ return debtLeft(d) > 0; });
   var lbl, m1, m2;
-  if (DTAB === 'loan') { lbl = 'Осталось выплатить'; m1 = ['В месяц', fmt(sum(act.map(function(d){ return d.pay || 0; })))]; m2 = ['Кредитов', act.length]; }
+  if (DTAB === 'done') { lbl = 'Закрыто долгов'; m1 = ['Кредитов', cur.filter(function(d){ return d.kind !== 'owed'; }).length]; m2 = ['Мне вернули', fmt(sum(cur.filter(function(d){ return d.kind === 'owed'; }).map(function(d){ return d.total; })))]; tot = cur.length; }
+  else if (DTAB === 'loan') { lbl = 'Осталось выплатить'; m1 = ['В месяц', fmt(sum(act.map(function(d){ return d.pay || 0; })))]; m2 = ['Кредитов', act.length]; }
   else { lbl = DTAB === 'owed' ? 'Мне должны' : 'Я должен'; m1 = [DTAB === 'owed' ? 'Должников' : 'Кому', act.length]; m2 = ['Просрочено', act.filter(dOver).length]; }
-  if (cur.length) h += '<div class="bal"><div class="lbl">' + lbl + '</div><div class="big">' + fmt(tot) + '</div><div class="row"><div class="mini"><span>' + m1[0] + '</span><b>' + m1[1] + '</b></div><div class="mini"><span>' + m2[0] + '</span><b>' + m2[1] + '</b></div></div></div>';
+  if (cur.length) h += '<div class="bal"><div class="lbl">' + lbl + '</div><div class="big">' + (DTAB === 'done' ? tot : fmt(tot)) + '</div><div class="row"><div class="mini"><span>' + m1[0] + '</span><b>' + m1[1] + '</b></div><div class="mini"><span>' + m2[0] + '</span><b>' + m2[1] + '</b></div></div></div>';
   if (cur.length) {
     var sorted = cur.slice().sort(function(a, b){ return (debtLeft(a) <= 0) - (debtLeft(b) <= 0) || (dOver(b) - dOver(a)); });
-    h += sorted.map(DTAB === 'loan' ? debtCard : personCard).join('');
+    h += sorted.map(function(d){ return d.kind === 'owed' ? personCard(d) : debtCard(d); }).join('');
   } else {
     var em = {loan: ['card', 'Кредитов нет', 'Добавьте кредит или рассрочку: Копилка посчитает, когда он закроется, и напомнит о платеже.'],
               owed: ['wallet', 'Вы никому не давали в долг', 'Записывайте, кому и сколько одолжили. Копилка покажет срок возврата и поможет напомнить.'],
-              owe: ['user', 'Вы никому не должны', 'Если заняли у человека, запишите здесь, чтобы не забыть вернуть.']}[DTAB];
+              done: ['shield', 'Закрытых долгов пока нет', 'Когда кредит выплачен или долг вернули, он переедет сюда.']}[DTAB];
     h += '<div class="card empty dempty"><div class="eico">' + ic(em[0], 28) + '</div><b>' + em[1] + '</b><p>' + em[2] + '</p></div>';
   }
-  return h + '<button class="btn ghost" data-act="newdebt" data-k="' + DTAB + '">' + ic('plus', 22) + ' ' + {loan: 'Добавить кредит', owed: 'Записать, кому дал', owe: 'Записать, кому должен'}[DTAB] + '</button>';
+  return h + '<button class="btn ghost" data-act="newdebt" data-k="' + (DTAB === 'owed' ? 'owed' : 'loan') + '">' + ic('plus', 22) + ' ' + {loan: 'Добавить кредит', owed: 'Записать, кому дал', done: 'Добавить кредит'}[DTAB] + '</button>';
 }
 function dLabels(k){
   return k === 'loan' ? {n: 'Название', ph: 'Например, Кредит в банке', a: 'Сумма кредита'} :
