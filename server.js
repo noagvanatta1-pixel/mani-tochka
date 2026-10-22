@@ -1223,6 +1223,18 @@ async function handleUpdate(u) {
   if (!m || !m.chat || m.chat.type !== 'private') return;
   const text = String(m.text || '').trim();
   const name = (m.from && m.from.first_name) || '';
+  /* публикация в канал от имени бота с кнопкой: только владелец. «/post текст» или фото с подписью «/post текст» */
+  const capt = String(m.caption || '').trim();
+  if (m.from && m.from.id === OWNER_ID && (/^\/post\b/.test(text) || (m.photo && /^\/post\b/.test(capt)))) {
+    if (!CHANNEL) return tgApi('sendMessage', { chat_id: m.chat.id, text: 'Канал не настроен (CHANNEL).' });
+    const body = (m.photo ? capt : text).replace(/^\/post\b\s*/, '').trim();
+    if (!body && !m.photo) return tgApi('sendMessage', { chat_id: m.chat.id, text: 'Напишите «/post текст» или отправьте фото с подписью «/post текст».' });
+    const kb = { inline_keyboard: [[{ text: 'Открыть Копилку', url: 'https://t.me/' + BOT_NAME }]] };
+    const r = m.photo
+      ? await tgApi('sendPhoto', { chat_id: '@' + CHANNEL, photo: m.photo[m.photo.length - 1].file_id, caption: body.slice(0, 1024), reply_markup: kb })
+      : await tgApi('sendMessage', { chat_id: '@' + CHANNEL, text: body.slice(0, 4096), reply_markup: kb });
+    return tgApi('sendMessage', { chat_id: m.chat.id, text: r && r.ok ? 'Опубликовано в канале ✅' : 'Не получилось: ' + ((r && r.description) || 'ошибка Telegram') + '. Бот должен быть админом канала с правом публикации.' });
+  }
   if (/^\/(help|support)\b/.test(text)) {
     const sup = SUPPORT_TG ? `\n\nПоддержка: @${SUPPORT_TG}` : '';
     return tgApi('sendMessage', { chat_id: m.chat.id, text: 'Быстрая запись трат: отправьте «кофе 250» или «такси 300». Доход: «+5000 зарплата».' + sup, reply_markup: openButton() });
