@@ -66,6 +66,9 @@ h1,h2,h3,p{margin:0}
 .gimg{position:relative;height:10.625rem;border-radius:1.25rem;overflow:hidden;background:linear-gradient(135deg,var(--pink-l),var(--pink))}
 .gimg img{width:100%;height:100%;object-fit:cover;display:block}
 .gimg .ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:3.5rem}
+.gimg .ph.add{flex-direction:column;gap:.6rem;color:#fff;background:radial-gradient(circle at 30% 20%,rgba(255,255,255,.18),transparent 55%),repeating-linear-gradient(135deg,rgba(255,255,255,.06) 0 .6rem,transparent .6rem 1.2rem);cursor:pointer}
+.gimg .ph.add .phc{width:4rem;height:4rem;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;border:.125rem dashed rgba(255,255,255,.7)}
+.gimg .ph.add b{font-size:1rem;font-weight:700}
 .badge{position:absolute;left:0.875rem;top:0.875rem;background:var(--pink);color:#fff;font-weight:700;font-size:0.875rem;padding:0.5625rem 1rem;border-radius:1.25rem}
 .ib{position:absolute;width:2.75rem;height:2.75rem;border-radius:50%;background:rgba(255,255,255,.88);color:var(--pink-d);display:flex;align-items:center;justify-content:center}
 .ib.del{right:0.625rem;top:0.625rem}.ib.star{right:3.875rem;top:0.625rem}.ib.cam{right:0.625rem;bottom:0.625rem}
@@ -1044,10 +1047,10 @@ function goalsSummary(){
 
 function goalCard(g, manage){
   var s = saved(g), p = pct(s, g.target), isMain = S.mainGoal === g.id;
-  var img = g.img ? '<img src="'+g.img+'" alt="">' : '<div class="ph" style="color:#fff">'+ic('target',56)+'</div>';
+  var img = g.img ? '<img src="'+g.img+'" alt="">' : '<div class="ph add"'+(manage ? ' data-act="photo" data-id="'+g.id+'"' : '')+'><span class="phc">'+ic('camera',30)+'</span><b>Добавить фото цели</b></div>';
   var tools = manage ? ((!isMain ? '<button class="ib star" data-act="maingoal" data-id="'+g.id+'" aria-label="Сделать основной">'+ic('star',22)+'</button>' : '') +
     '<button class="ib del" data-act="delgoal" data-id="'+g.id+'" aria-label="Удалить">'+ic('trash',22)+'</button>' +
-    '<button class="ib cam" data-act="photo" data-id="'+g.id+'" aria-label="Фото">'+ic('camera',22)+'</button>') : '';
+    (g.img ? '<button class="ib cam" data-act="photo" data-id="'+g.id+'" aria-label="Фото">'+ic('camera',22)+'</button>' : '')) : '';
   return '<div class="card"><div class="gimg">'+img+(isMain ? '<span class="badge">Основная</span>' : '')+tools+'</div>' +
     '<div class="grow"><div class="gname" data-act="editgoal" data-id="'+g.id+'">'+esc(g.name)+'</div><span class="pill">'+p+'%</span></div>' +
     '<div class="gsum"><b>'+fmt(s)+'</b> из '+fmt(g.target)+'</div>' + planLine(g) + goalForecast(g) +
