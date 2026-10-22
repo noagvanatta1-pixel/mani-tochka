@@ -503,6 +503,7 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .debt .amt.in{color:var(--green)}
 .dtag{display:inline-block;margin:-.3rem 0 .5rem .25rem;padding:.2rem .65rem;border-radius:1rem;font-size:.75rem;font-weight:800}
 .dtag.bad{background:rgba(229,72,77,.18);color:var(--red)}.dtag.ok{background:rgba(15,157,115,.18);color:var(--green)}
+.dremind{display:block;margin:.1rem auto 0;padding:.5rem;font-size:.85rem;font-weight:700;color:var(--muted)}
 .dbtns{display:flex;gap:.5rem}.dbtns .btn{flex:1}
 .dempty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:.4rem;padding:1.6rem 1.2rem}
 .dempty .eico{width:3.6rem;height:3.6rem;border-radius:50%;display:grid;place-items:center;background:var(--pink-l);color:var(--pink-d);margin-bottom:.3rem}
@@ -1095,7 +1096,7 @@ function debtCard(d){
     '<div class="dmeta">' + meta.join('<br>') + '</div>' + (fc ? '<div class="dmeta">' + fc + '</div>' : '') +
     (po.done ? '' : '<button class="btn ghost" data-act="debtpay" data-id="' + d.id + '">' + (d.kind === 'owed' ? 'Принять возврат' : 'Внести платёж') + '</button>') + '</div>';
 }
-var DTAB = '';
+var DTAB = '', dLend = true;
 function dShort(ds){ return ds ? ds.slice(8,10) + '.' + ds.slice(5,7) : ''; }
 function dOver(d){ return !!(d.due && d.due < today() && debtLeft(d) > 0); }
 function pHue(n){ var h = 0; String(n).split('').forEach(function(c){ h = (h * 31 + c.charCodeAt(0)) % 360; }); return h; }
@@ -1114,17 +1115,18 @@ function personCard(d){
     '<div class="amt ' + (owed ? 'in' : '') + '">' + fmt(done ? d.total : left) + '</div></div>' + tag +
     (paid > 0 && !done ? '<div class="bar"><i style="width:' + pct(paid, d.total) + '%"></i></div><div class="dmeta">Вернули ' + fmt(paid) + ' из ' + fmt(d.total) + '</div>' : '') +
     (d.note ? '<div class="dmeta">' + esc(d.note) + '</div>' : '') +
-    (done ? '' : '<div class="dbtns"><button class="btn ghost" data-act="debtpay" data-id="' + d.id + '">' + (owed ? 'Принять возврат' : 'Вернуть') + '</button>' +
-      (owed ? '<button class="btn ghost" data-act="dremind" data-id="' + d.id + '">Напомнить</button>' : '') + '</div>') + '</div>';
+    (done ? '' : (owed ? '<div class="dbtns"><button class="btn ghost" data-act="dfull" data-id="' + d.id + '">Вернули всё</button><button class="btn ghost" data-act="debtpay" data-id="' + d.id + '">Вернули часть</button></div>' +
+      '<button class="dremind" data-act="dremind" data-id="' + d.id + '">Напомнить в Telegram</button>' :
+      '<div class="dbtns"><button class="btn ghost" data-act="debtpay" data-id="' + d.id + '">Вернуть</button></div>')) + '</div>';
 }
 function vDebt(){
   var list = S.debts || [];
   var h = '<div class="top"><div><div class="title">Долги</div><div class="hi" style="margin-top:0.25rem">Кредиты, долги и кто что должен</div></div></div>';
   var by = {loan: [], owe: [], owed: []};
-  list.forEach(function(d){ (by[d.kind] || by.loan).push(d); });
-  if (!DTAB || !by[DTAB]) DTAB = by.loan.length ? 'loan' : (by.owed.length ? 'owed' : (by.owe.length ? 'owe' : 'loan'));
+  list.forEach(function(d){ (d.kind === 'owed' ? by.owed : by.loan).push(d); });
+  if (!DTAB || !by[DTAB]) DTAB = by.loan.length ? 'loan' : (by.owed.length ? 'owed' : 'loan');
   var names = {loan: 'Кредиты', owe: 'Я должен', owed: 'Мне должны'};
-  h += '<div class="seg dseg">' + ['loan', 'owed', 'owe'].map(function(k){
+  h += '<div class="seg dseg">' + ['loan', 'owed'].map(function(k){
     return '<button class="' + (k === DTAB ? 'on' : '') + '" data-act="dtab" data-v="' + k + '">' + names[k] + (by[k].length ? ' <i>' + by[k].length + '</i>' : '') + '</button>'; }).join('') + '</div>';
   var cur = by[DTAB], tot = sum(cur.map(debtLeft)), act = cur.filter(function(d){ return debtLeft(d) > 0; });
   var lbl, m1, m2;
@@ -1147,10 +1149,10 @@ function dLabels(k){
          k === 'owed' ? {n: 'Кто должен', ph: 'Имя, например Саша', a: 'Сколько одолжили'} : {n: 'Кому должен', ph: 'Имя, например Саша', a: 'Сколько занял'};
 }
 function openDebt(id, kind){
-  var d = id ? S.debts.filter(function(x){ return x.id === id; })[0] : null; dId = d ? d.id : null; dKind = d ? d.kind : (kind || 'loan');
+  var d = id ? S.debts.filter(function(x){ return x.id === id; })[0] : null; dId = d ? d.id : null; dKind = d ? (d.kind === 'owe' ? 'loan' : d.kind) : (kind || 'loan'); dLend = true;
   var L = dLabels(dKind), loan = dKind === 'loan';
   sheet('<h3>' + (d ? 'Изменить' : (loan ? 'Новый кредит' : 'Новый долг')) + '</h3>' +
-    '<div class="seg" id="d-kind">' + [['loan', 'Кредит'], ['owed', 'Мне должны'], ['owe', 'Я должен']].map(function(k){ return '<button class="' + (k[0] === dKind ? 'on' : '') + '" data-act="dkind" data-v="' + k[0] + '">' + k[1] + '</button>'; }).join('') + '</div>' +
+    '<div class="seg" id="d-kind">' + [['loan', 'Кредит'], ['owed', 'Мне должны']].map(function(k){ return '<button class="' + (k[0] === dKind ? 'on' : '') + '" data-act="dkind" data-v="' + k[0] + '">' + k[1] + '</button>'; }).join('') + '</div>' +
     amtCard('d-total', L.a, d ? d.total : '', 'wallet') +
     '<label id="d-nl">' + L.n + '</label><input id="d-name" value="' + esc(d ? d.name : '') + '" placeholder="' + L.ph + '" autocomplete="off">' +
     '<div id="d-loan" style="display:' + (loan ? '' : 'none') + '">' +
@@ -1159,10 +1161,18 @@ function openDebt(id, kind){
       '<label>Ставка, % годовых</label><input id="d-rate" inputmode="decimal" value="' + (d && d.rate ? d.rate : '') + '" placeholder="Необязательно, для прогноза срока" autocomplete="off"></div>' +
     '<div id="d-pers" style="display:' + (loan ? 'none' : '') + '">' +
       '<label>Вернуть до (необязательно)</label><input class="f" id="d-due" type="date" value="' + (d && d.due ? d.due : '') + '">' +
+      (!d ? '<div id="d-lendbox"><label>Списать с баланса</label><div class="seg" id="d-lend"><button class="on" data-act="dlend" data-v="1">Да, деньги ушли</button><button data-act="dlend" data-v="0">Нет, не списывать</button></div></div>' : '') +
       '<label>Заметка</label><input id="d-note" value="' + esc(d && d.note ? d.note : '') + '" placeholder="Например, на ремонт машины" autocomplete="off"></div>' +
     (d && (d.payments || []).length ? '<button class="btn ghost" data-act="undopay" data-id="' + d.id + '" style="margin-top:.6rem">Отменить последний платёж</button>' : '') +
     (d ? '<button class="btn danger" data-act="deldebt" data-id="' + d.id + '" style="margin-top:.6rem">Удалить</button>' : '') +
     '<button class="btn big" data-act="savedebt">' + (d ? 'Сохранить' : 'Добавить') + '</button>');
+}
+function recordDebtPay(x, a, date){
+  var left = debtLeft(x); if (a > left) a = left; if (a <= 0) return;
+  var cat = S.cats.filter(function(c){ return c.name === 'Кредиты'; })[0], owed = x.kind === 'owed';
+  var op = {id: uid(), type: owed ? 'income' : 'expense', amount: a, catId: owed || !cat ? '' : cat.id, note: (owed ? 'Возврат: ' : 'Платёж: ') + x.name, date: date, t: Date.now(), by: tgUser ? tgUser.id : 0, debt: x.id};
+  S.ops.push(op); x.payments.push({id: uid(), date: date, amount: a, opId: op.id});
+  save(); haptic('medium'); render(); toast(debtLeft(x) <= 0 ? (owed ? 'Всё вернули 🎉' : 'Долг погашен 🎉') : (owed ? 'Возврат записан' : 'Платёж записан'));
 }
 function removeDebtPay(d, p){
   d.payments = d.payments.filter(function(x){ return x.id !== p.id; });
@@ -1625,6 +1635,7 @@ var ACT = {
   },
   gosummary: function(d){ var p = d.k.split('-'); VM.y = +p[0]; VM.m = +p[1] - 1; TAB = 'an'; window.scrollTo(0, 0); render(); },
   newdebt: function(d){ if ((S.debts || []).length >= 1 && gate('Несколько долгов')) return; openDebt(null, d && d.k); },
+  dlend: function(d, el){ dLend = d.v === '1'; document.querySelectorAll('#d-lend button').forEach(function(b){ b.classList.toggle('on', b === el); }); },
   dtab: function(d){ DTAB = d.v; window.scrollTo(0, 0); render(); },
   dremind: function(d){
     var x = S.debts.filter(function(y){ return y.id === d.id; })[0]; if (!x) return;
@@ -1649,7 +1660,11 @@ var ACT = {
     if (!Array.isArray(S.debts)) S.debts = [];
     var d = dId ? S.debts.filter(function(x){ return x.id === dId; })[0] : null;
     if (d) { d.kind = dKind; d.name = name; d.total = total; d.pay = pay; d.day = day; d.rate = rate; d.due = due; d.note = note; }
-    else S.debts.push({id: uid(), kind: dKind, name: name, total: total, pay: pay, day: day, rate: rate, due: due, note: note, date: today(), payments: [], t: Date.now()});
+    else {
+      var nd = {id: uid(), kind: dKind, name: name, total: total, pay: pay, day: day, rate: rate, due: due, note: note, date: today(), payments: [], t: Date.now()};
+      S.debts.push(nd);
+      if (dKind === 'owed' && dLend) S.ops.push({id: uid(), type: 'expense', amount: total, catId: '', note: 'Дал в долг: ' + name, date: today(), t: Date.now(), by: tgUser ? tgUser.id : 0, lend: nd.id});
+    }
     DTAB = dKind;
     save(); closeSheet(); render(); toast('Сохранено');
   },
@@ -1664,21 +1679,21 @@ var ACT = {
   },
   debtpay: function(d){
     var x = S.debts.filter(function(y){ return y.id === d.id; })[0]; if (!x) return; dpId = x.id;
-    var left = debtLeft(x), def = x.pay > 0 ? Math.min(x.pay, left) : left;
+    var left = debtLeft(x), def = x.kind === 'owed' ? '' : (x.pay > 0 ? Math.min(x.pay, left) : left);
     sheet('<h3>' + (x.kind === 'owed' ? 'Возврат долга' : 'Платёж') + '</h3><div class="hi" style="margin:.1rem .25rem .6rem;font-weight:600">' + esc(x.name) + ' · осталось ' + fmt(left) + '</div>' +
-      amtCard('dp-amt', 'Сумма платежа', def || '', 'card') +
+      amtCard('dp-amt', x.kind === 'owed' ? 'Сколько вернули' : 'Сумма платежа', def || '', x.kind === 'owed' ? 'wallet' : 'card') +
       '<label>Дата</label><input class="f" id="dp-date" type="date" value="' + today() + '">' +
       '<button class="btn big" data-act="savedebtpay">Записать</button>');
   },
   savedebtpay: function(){
     var x = S.debts.filter(function(y){ return y.id === dpId; })[0]; if (!x) return;
-    var a = num($('#dp-amt').value), left = debtLeft(x), date = $('#dp-date').value || today();
+    var a = num($('#dp-amt').value), date = $('#dp-date').value || today();
     if (a <= 0) { toast('Введите сумму'); return; }
-    if (a > left) a = left;
-    var cat = S.cats.filter(function(c){ return c.name === 'Кредиты'; })[0], owed = x.kind === 'owed';
-    var op = {id: uid(), type: owed ? 'income' : 'expense', amount: a, catId: owed || !cat ? '' : cat.id, note: (owed ? 'Возврат: ' : 'Платёж: ') + x.name, date: date, t: Date.now(), by: tgUser ? tgUser.id : 0, debt: x.id};
-    S.ops.push(op); x.payments.push({id: uid(), date: date, amount: a, opId: op.id});
-    save(); closeSheet(); haptic('medium'); render(); toast(debtLeft(x) <= 0 ? 'Долг погашен 🎉' : 'Платёж записан');
+    recordDebtPay(x, a, date); closeSheet();
+  },
+  dfull: function(d){
+    var x = S.debts.filter(function(y){ return y.id === d.id; })[0]; if (!x) return;
+    confirmBox(x.name + ' вернул(а) всё: ' + fmt(debtLeft(x)) + '? Сумма попадёт в доходы.', function(){ recordDebtPay(x, debtLeft(x), today()); });
   },
   mpick: function(el){
     var ks = monthKeys(); if (ks.length < 2) return;
