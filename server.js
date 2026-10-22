@@ -911,6 +911,7 @@ function chanOk(uid) {
   const r = q.chanGet.get(uid);
   return !!(r && r.ok);
 }
+let lastChanErr = '';
 async function checkChannel(uid) {
   if (!CHANNEL || !BOT_TOKEN || uid >= EMAIL_UID_BASE) return false;
   try {
@@ -919,10 +920,12 @@ async function checkChannel(uid) {
       const st = r.result.status;
       const ok = st === 'creator' || st === 'administrator' || st === 'member' || (st === 'restricted' && r.result.is_member !== false);
       q.chanPut.run(uid, ok ? 1 : 0, Date.now());
+      lastChanErr = '';
       return ok;
     }
-    console.error('Канал: Telegram не отдал статус подписки:', r && r.description);
-  } catch (e) { console.error('Канал: не удалось проверить подписку:', e.message); }
+    lastChanErr = (r && r.description) || 'нет ответа';
+    console.error('Канал: Telegram не отдал статус подписки:', lastChanErr);
+  } catch (e) { lastChanErr = e.message; console.error('Канал: не удалось проверить подписку:', e.message); }
   return chanOk(uid);   // Telegram не ответил: оставляем прежний результат
 }
 function chanPromo(uid) {
@@ -1107,7 +1110,7 @@ async function handleCallback(cb) {
   }
   if (parts[0] === 'chan' && cb.from) {
     const ok = await checkChannel(cb.from.id);
-    await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: !CHANNEL ? 'Канал пока не подключён' : ok ? `Готово: скидка ${CHANNEL_DISC}% включена` : 'Подписку не нашёл. Подпишитесь на канал и нажмите ещё раз', show_alert: true });
+    await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: !CHANNEL ? 'Канал пока не подключён' : (!ok && lastChanErr && cb.from.id === OWNER_ID) ? 'Ошибка Telegram: ' + lastChanErr.slice(0, 150) : ok ? `Готово: скидка ${CHANNEL_DISC}% включена` : 'Подписку не нашёл. Подпишитесь на канал и нажмите ещё раз', show_alert: true });
     if (ok && cb.message) await tgApi('sendMessage', { chat_id: cb.message.chat.id, ...plansMessage(cb.from.id) });
     return;
   }
