@@ -956,13 +956,23 @@ function upcomingBills(){
   });
   return total;
 }
+/* сколько ещё нужно отложить в этом месяце по планам целей (в т.ч. подушки) */
+function goalReserve(k){
+  var t = 0;
+  S.goals.forEach(function(g){
+    var p = plan(g); if (!p || p.done || !(p.per > 0)) return;
+    var c = sum(g.contribs.filter(function(x){ return x.date.slice(0, 7) === k; }).map(function(x){ return x.amount; }));
+    t += Math.max(0, p.per - c);
+  });
+  return t;
+}
 function safeToday(){
   if (!isCur()) return null;
   var k = curKey(), dl = daysLeft(), t = today();
   var spentToday = sum(S.ops.filter(function(o){ return o.type === 'expense' && o.date === t; }).map(function(o){ return o.amount; }));
-  var left = leftOf(k) - upcomingBills();
+  var gr = goalReserve(k), left = leftOf(k) - upcomingBills() - gr;
   var allowance = (left + spentToday) / dl;
-  return {left: left, dl: dl, allowance: allowance, rest: allowance - spentToday, bills: upcomingBills()};
+  return {left: left, dl: dl, allowance: allowance, rest: allowance - spentToday, bills: upcomingBills(), goals: gr};
 }
 function monthStats(k){
   var p = k.split('-'), prev = mk(+p[0], +p[1] - 2 < 0 ? 11 : +p[1] - 2);
@@ -1009,7 +1019,7 @@ function alertCard(k){
   var lim = over.length ? '<span class="wl">Лимит превышен: ' + over.join(', ') + '</span>' : '';
   if (!f) return over.length ? '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Лимит превышен</b><span>' + over.join(', ') + '</span></div>' + x + '</div>' : '';
   if (empty) return '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Бюджет месяца исчерпан</b><span>Остаток с учётом платежей: ' + fmt(f.left) + '</span>' + lim + '</div>' + x + '</div>';
-  var inf = 'По ' + fmt(f.allowance) + ' в день до конца месяца' + (f.bills > 0 ? ' · учтены платежи ' + fmt(f.bills) : '');
+  var inf = 'По ' + fmt(f.allowance) + ' в день до конца месяца' + (f.bills > 0 ? ' · учтены платежи ' + fmt(f.bills) : '') + (f.goals > 0 ? ' · отложить на цели ' + fmt(f.goals) : '');
   if (!neg && over.length) return '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Лимит превышен: ' + over.join(', ') + '</b><span>Сегодня можно потратить ' + fmt(f.rest) + ' · ' + inf + '</span></div>' + x + '</div>';
   return '<div class="safe' + (neg ? ' bad' : '') + '"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>' + (neg ? 'Сегодня сверх нормы: ' + fmt(-f.rest) : 'Безопасно потратить сегодня: ' + fmt(f.rest)) + '</b><span>' + inf + '</span>' + lim + '</div>' + x + '</div>';
 }
