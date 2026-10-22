@@ -941,6 +941,42 @@ function streakInfo(){
   return {n: n, today: wrote};
 }
 function debtLeft(d){ return Math.max(0, d.total - sum((d.payments || []).map(function(p){ return p.amount; }))); }
+function billsByCat(){
+  var t = today(), k = curKey(), by = {}, kc = S.cats.filter(function(c){ return c.name === 'Кредиты'; })[0];
+  function add(c, a){ by[c || ''] = (by[c || ''] || 0) + a; }
+  (S.recurring || []).forEach(function(r){
+    if (r.from && r.from > k) return;
+    var date = k + '-' + pad(Math.min(r.day, dim()));
+    if (date > t) add(r.catId, r.amount);
+  });
+  (S.debts || []).forEach(function(d){
+    if (d.kind === 'owed' || !(d.pay > 0) || debtLeft(d) <= 0) return;
+    var date = k + '-' + pad(Math.min(d.day || 1, dim()));
+    var paid = (d.payments || []).some(function(p){ return p.date.slice(0,7) === k; });
+    if (date > t && !paid) add(kc ? kc.id : '', Math.min(d.pay, debtLeft(d)));
+  });
+  return by;
+}
+function upcomingBills(){ var by = billsByCat(); return sum(Object.keys(by).map(function(c){ return by[c]; })); }
+/* сколько месяц уже «занят»: остатки лимитов по категориям + платежи вне лимитов */
+function plannedLeft(k){
+  var by = billsByCat(), tot = 0, used = {};
+  S.cats.forEach(function(c){
+    var b = by[c.id] || 0;
+    if (c.limit > 0) { var sp = sum(catOps(k, c.id).map(function(o){ return o.amount; })); tot += Math.max(c.limit - sp, b); used[c.id] = 1; }
+  });
+  Object.keys(by).forEach(function(c){ if (!used[c]) tot += by[c]; });
+  return tot;
+}
+function streakInfo(){
+  var days = {}; S.ops.forEach(function(o){ if (!o.auto) days[o.date] = 1; });
+  var now = new Date(), c = new Date(now), n = 0;
+  var wrote = !!days[dkey(now)];
+  if (!wrote) c.setDate(c.getDate() - 1);
+  while (days[dkey(c)] && n < 3650) { n++; c.setDate(c.getDate() - 1); }
+  return {n: n, today: wrote};
+}
+function debtLeft(d){ return Math.max(0, d.total - sum((d.payments || []).map(function(p){ return p.amount; }))); }
 function upcomingBills(){
   var t = today(), k = curKey(), total = 0;
   (S.recurring || []).forEach(function(r){
@@ -969,10 +1005,11 @@ function goalReserve(k){
 function safeToday(){
   if (!isCur()) return null;
   var k = curKey(), dl = daysLeft(), t = today();
-  var spentToday = sum(S.ops.filter(function(o){ return o.type === 'expense' && o.date === t; }).map(function(o){ return o.amount; }));
-  var gr = goalReserve(k), left = leftOf(k) - upcomingBills() - gr;
+  var lim = {}; S.cats.forEach(function(c){ if (c.limit > 0) lim[c.id] = 1; });
+  var spentToday = sum(S.ops.filter(function(o){ return o.type === 'expense' && o.date === t && !lim[o.catId]; }).map(function(o){ return o.amount; }));
+  var gr = goalReserve(k), pl = plannedLeft(k), left = leftOf(k) - pl - gr;
   var allowance = (left + spentToday) / dl;
-  return {left: left, dl: dl, allowance: allowance, rest: allowance - spentToday, bills: upcomingBills(), goals: gr};
+  return {left: left, dl: dl, allowance: allowance, rest: allowance - spentToday, bills: upcomingBills(), plan: pl, goals: gr};
 }
 function monthStats(k){
   var p = k.split('-'), prev = mk(+p[0], +p[1] - 2 < 0 ? 11 : +p[1] - 2);
@@ -1019,7 +1056,7 @@ function alertCard(k){
   var lim = over.length ? '<span class="wl">Лимит превышен: ' + over.join(', ') + '</span>' : '';
   if (!f) return over.length ? '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Лимит превышен</b><span>' + over.join(', ') + '</span></div>' + x + '</div>' : '';
   if (empty) return '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Бюджет месяца исчерпан</b><span>Остаток с учётом платежей: ' + fmt(f.left) + '</span>' + lim + '</div>' + x + '</div>';
-  var inf = 'По ' + fmt(f.allowance) + ' в день до конца месяца' + (f.bills > 0 ? ' · учтены платежи ' + fmt(f.bills) : '') + (f.goals > 0 ? ' · отложить на цели ' + fmt(f.goals) : '');
+  var inf = 'По ' + fmt(f.allowance) + ' в день до конца месяца' + (f.plan > 0 ? ' · зарезервировано под лимиты и платежи ' + fmt(f.plan) : '') + (f.goals > 0 ? ' · отложить на цели ' + fmt(f.goals) : '');
   if (!neg && over.length) return '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Лимит превышен: ' + over.join(', ') + '</b><span>Сегодня можно потратить ' + fmt(f.rest) + ' · ' + inf + '</span></div>' + x + '</div>';
   return '<div class="safe' + (neg ? ' bad' : '') + '"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>' + (neg ? 'Сегодня сверх нормы: ' + fmt(-f.rest) : 'Безопасно потратить сегодня: ' + fmt(f.rest)) + '</b><span>' + inf + '</span>' + lim + '</div>' + x + '</div>';
 }
