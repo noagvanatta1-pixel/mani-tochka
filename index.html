@@ -522,6 +522,13 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .stile.on{background:linear-gradient(135deg,var(--bal1),var(--bal2));color:#fff;box-shadow:0 .5rem 1.2rem rgba(var(--sh),.3)}
 .stile.on .si{background:rgba(255,255,255,.22);color:#fff}
 .stile.on em{color:rgba(255,255,255,.8)}
+
+/* плитки на главной */
+.htiles{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin:.75rem 0 .25rem}
+.ht{display:flex;align-items:center;flex-wrap:wrap;gap:.1rem .6rem;padding:.8rem .9rem;border-radius:1.1rem;background:var(--pink-l);color:var(--ink);text-align:left}
+.ht .hi2{width:2.3rem;height:2.3rem;border-radius:.75rem;display:flex;align-items:center;justify-content:center;color:#fff;flex:none}
+.ht b{font-size:1rem;font-weight:800;flex:1;min-width:0}
+.ht em{flex-basis:100%;font-style:normal;font-size:.75rem;font-weight:600;color:var(--muted);margin-top:.35rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 </head>
 <body>
@@ -1048,6 +1055,11 @@ function quickRow(){
     var a = x[0].indexOf('tab:') === 0 ? 'data-tab="' + x[0].slice(4) + '"' : 'data-act="' + x[0] + '"';
     return '<button ' + a + '><span class="qi">' + ic(x[1], 24) + '</span>' + x[2] + '</button>'; }).join('') + '</div>';
 }
+function homeTiles(){
+  var rl = S.recurring || [], rsum = sum(rl.map(function(r){ return r.amount; }));
+  return '<div class="htiles"><button class="ht plan" data-act="plan"><span class="hi2" style="background:#e69a00">' + ic('calc', 22) + '</span><b>Бюджет</b><em>Спланировать</em></button>' +
+    '<button class="ht rec" data-act="recopen"><span class="hi2" style="background:var(--green,#0f9d74)">' + ic('repeat', 22) + '</span><b>Регулярные</b><em>' + (rl.length ? rl.length + ' · ' + fmt(rsum) + ' в мес.' : 'Добавить платёж') + '</em></button></div>';
+}
 function vHome(){
   var k = curKey(), h = webBar() + monthHeader(true) + trialBar();
   var g = goalById(S.mainGoal) || S.goals[0];
@@ -1056,7 +1068,7 @@ function vHome(){
   h += alertCard(k) + streakChip() + summaryBanner();
   if (g) h += goalMini(g);
   h += workCard();
-  h += '<div class="plan slim" data-act="plan">'+ic('calc',20)+'<b>Спланировать бюджет</b><span>›</span></div>';
+  h += homeTiles();
   h += '<div class="sec"><h2>Категории</h2><button class="catedit" data-act="catmanage">' + ic('gear', 16) + ' Изменить</button></div>';
   h += S.cats.length ? '<div class="hgrid">' + S.cats.map(function(c){ return catCard(c, k); }).join('') + '</div>' : '<div class="card empty">Категорий пока нет. Откройте «Спланировать бюджет» и добавьте их.</div>';
   return h + recentOps(k);
@@ -1324,7 +1336,7 @@ function vProf(){
     scopeCard() +
     '<div class="plan slim setlink" data-act="opensettings">'+ic('gear',20)+'<b>Настройки</b><span>›</span></div>' +
     ((PLAN ? PLAN.owner : ownCached()) ? '<div class="plan slim setlink" data-act="stats">'+ic('chart',20)+'<b>Статистика</b><span>›</span></div>' : '') +
-    planCard() + (scope === 'me' ? workListCard() : '') + recurCard() + familyCard() + refCard() + accountCard() + supportCard() +
+    planCard() + (scope === 'me' ? workListCard() : '') + familyCard() + refCard() + accountCard() + supportCard() +
     '<div class="ver">Копилка · ' + (ONLINE ? 'данные синхронизируются с сервером' : 'данные хранятся на этом устройстве') + '</div>';
 }
 function currencyCard(){
@@ -2006,12 +2018,14 @@ var ACT = {
     if (!name) { toast('Введите название'); return; }
     if (a <= 0) { toast('Введите сумму'); return; }
     var n = new Date();
+    if (!Array.isArray(S.recurring)) S.recurring = [];
     S.recurring.push({id: uid(), name: name, amount: a, catId: recCat, day: day, from: mk(n.getFullYear(), n.getMonth())});
     applyRecurring(); save(); closeSheet(); render(); toast('Платёж добавлен');
   },
+  recopen: function(){ openRecList(); },
   delrec: function(d){
     var r = S.recurring.filter(function(x){ return x.id === d.id; })[0]; if (!r) return;
-    confirmBox('Удалить регулярный платёж «' + r.name + '»? Уже добавленные операции останутся.', function(){ S.recurring = S.recurring.filter(function(x){ return x.id !== d.id; }); save(); render(); });
+    confirmBox('Удалить регулярный платёж «' + r.name + '»? Уже добавленные операции останутся.', function(){ S.recurring = S.recurring.filter(function(x){ return x.id !== d.id; }); save(); render(); if ($('#sheet .panel')) openRecList(); });
   },
   export: function(){
     if (gate('Экспорт операций')) return;
@@ -2394,6 +2408,14 @@ function recurCard(){
       '<div class="hi" style="margin:.4rem .25rem .6rem;font-size:.8rem;font-weight:600">Нажмите на платёж, чтобы удалить</div>'
       : '<div class="hi" style="margin:0 .25rem .6rem;font-weight:600">Аренда, кредит, подписки: добавятся сами каждый месяц.</div>') +
     '<button class="btn ghost" data-act="newrec">'+ic('plus',22)+' Добавить платёж</button></div>';
+}
+function openRecList(){
+  var list = S.recurring || [];
+  sheet('<h3>Регулярные платежи</h3>' +
+    (list.length ? '<div class="card" style="box-shadow:none;padding:.3rem 0">' + list.map(function(r){ var c = catById(r.catId); return '<div class="rec" data-act="delrec" data-id="'+r.id+'"><div>'+(c ? ci(c.emoji,'sm') + ' ' : '')+esc(r.name)+'<br><span>каждого '+r.day+'-го числа</span></div><b>'+fmt(r.amount)+'</b></div>'; }).join('') + '</div>' +
+      '<div class="hi" style="margin:.4rem .25rem .6rem;font-size:.8rem;font-weight:600">Нажмите на платёж, чтобы удалить</div>'
+      : '<div class="hi" style="margin:0 .25rem .8rem;font-weight:600">Аренда, кредит, подписки: добавятся в расходы сами каждый месяц.</div>') +
+    '<button class="btn big" data-act="newrec">' + ic('plus', 22) + ' Добавить платёж</button>');
 }
 function openRecur(){
   recCat = S.cats[0] ? S.cats[0].id : '';
