@@ -181,7 +181,7 @@ const PAYWALL = process.env.PAYWALL === '1';
 const TRIAL_DAYS = Number(process.env.TRIAL_DAYS) || 14;
 const PRICE_MONTH = Number(process.env.PRICE_MONTH) || 99;
 const PRICE_YEAR = Number(process.env.PRICE_YEAR) || 790;
-const CHANNEL = String(process.env.CHANNEL || '').replace(/^https?:\/\/t\.me\//i, '').replace(/^@/, '').replace(/[^\w]/g, '');   // публичный Telegram-канал: подписчикам скидка
+const CHANNEL = String(process.env.CHANNEL !== undefined ? process.env.CHANNEL : 'noakopilka').replace(/^https?:\/\/t\.me\//i, '').replace(/^@/, '').replace(/[^\w]/g, '');   // публичный Telegram-канал: подписчикам скидка
 const CHANNEL_DISC = Number(process.env.CHANNEL_DISC) || 20;
 const PRICE_LIFE = Number(process.env.PRICE_LIFE) || 1990;     // разовая оплата, подписка навсегда
 const OWNER_ID = Number(process.env.OWNER_ID) || 8675855634;      // только он видит статистику
