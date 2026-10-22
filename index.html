@@ -537,6 +537,8 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 @keyframes curOut{from{transform:none}to{transform:translateX(-100%)}}
 .curtain.cin{animation:curIn .3s cubic-bezier(.22,.8,.25,1) both}
 .curtain.cout{animation:curOut .26s cubic-bezier(.4,0,.8,.4) both}
+.plan.slim.acc span{transition:transform .2s}.plan.slim.acc.open span{transform:rotate(90deg)}
+.plan.slim[data-act=themetoggle]>:first-child{background:#9b59d6!important}
 </style>
 </head>
 <body>
@@ -1356,6 +1358,10 @@ function currencyCard(){
   return '<div class="card set"><label style="margin-top:0">Валюта учёта</label><div class="chips">' + Object.keys(CURS).filter(function(c){ return ['RUB','USD','KZT','UAH'].indexOf(c) >= 0 || c === baseCode(); }).map(function(c){ return '<button class="chip ' + (baseCode() === c ? 'on' : '') + '" data-act="setcur" data-v="' + c + '">' + CURS[c][0] + ' ' + c + '</button>'; }).join('') + '</div>' +
     '<div class="hi" style="margin:.7rem .25rem 0;font-size:.8rem;font-weight:600">Все суммы показываются в этой валюте. При смене валюты все записи пересчитаются по курсу ЦБ.</div></div>';
 }
+var THEMEOPEN = false;
+function themeAcc(){
+  return '<div class="plan slim setlink acc ' + (THEMEOPEN ? 'open' : '') + '" data-act="themetoggle">' + ic('palette', 20) + '<b>Оформление</b><span>›</span></div>' + (THEMEOPEN ? themeCard() : '');
+}
 function themeCard(){
   return '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + themeBtns(['dark', 'pink']) + '</div>' + (MORE_TH || ['dark', 'pink'].indexOf(P().theme || 'dark') < 0 ? '<div class="themes" style="margin-top:.5rem">' + themeBtns(Object.keys(THEMES).filter(function(k){ return k !== 'dark' && k !== 'pink'; })) + '</div>' + (['dark', 'pink'].indexOf(P().theme || 'dark') >= 0 ? '<button class="btn ghost" style="margin-top:.6rem" data-act="lessth">Скрыть темы</button>' : '') : '<button class="btn ghost" style="margin-top:.6rem" data-act="moreth">Ещё темы</button>') +
     '<label>Зимний вайб</label><div class="seg"><button class="'+(P().snow === true ? 'on' : '')+'" data-act="snow" data-v="1">❄ Снегопад</button><button class="'+(P().snow !== true ? 'on' : '')+'" data-act="snow" data-v="0">Без снега</button></div>' +
@@ -1370,7 +1376,7 @@ function vSet(){
     '<label>Доход в месяц, '+SYM()+': от и до</label><div class="row2"><input class="f" id="s-inc" inputmode="decimal" value="'+S.defaultIncome+'" placeholder="от" style="flex:1"><input class="f" id="s-incmax" inputmode="decimal" value="'+(S.incomeMax > S.defaultIncome ? S.incomeMax : '')+'" placeholder="до" style="flex:1"></div>' +
     '<div class="hi" style="margin:.4rem .25rem 0;font-size:.8rem;font-weight:600">Бюджет считается по «от», чтобы хватало и в слабый месяц. «До» — необязательно.</div>' +
     '<button class="btn big" data-act="savesettings">Сохранить</button></div>' +
-    themeCard() + currencyCard() + familyCard() + remindCard() + exportCard() +
+    themeAcc() + currencyCard() + familyCard() + remindCard() + exportCard() +
     accountDanger();
 }
 
@@ -2035,6 +2041,7 @@ var ACT = {
     S.recurring.push({id: uid(), name: name, amount: a, catId: recCat, day: day, from: mk(n.getFullYear(), n.getMonth())});
     applyRecurring(); save(); closeSheet(); render(); toast('Платёж добавлен');
   },
+  themetoggle: function(){ THEMEOPEN = !THEMEOPEN; render(); },
   refopen: function(){ REFOPEN = true; render(); },
   refclose: function(){ REFOPEN = false; render(); },
   recopen: function(){ openRecList(); },
