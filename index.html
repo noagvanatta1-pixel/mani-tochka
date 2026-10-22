@@ -2155,18 +2155,67 @@ function curtainRun(oldG, opening){
   var tm = setTimeout(fin, 360); CURT = fin;
 }
 function swipeDir(dx){ return dx > 0 ? (TAB !== 'prof' && TAB !== 'set' ? 'prof' : null) : ((TAB === 'prof' || TAB === 'set') ? 'home' : null); }
+/* шторка следует за пальцем */
+var DRAG = null;
+function viewHtml(t){ return ({home: vHome, goals: vGoals, debt: vDebt, an: vAn, set: vSet, prof: vProf})[t](); }
+function mkLayer(html, y){
+  var cs = getComputedStyle(document.body), g = document.createElement('div'), inner = document.createElement('div');
+  g.className = 'curtain'; g.style.background = cs.backgroundColor; g.style.backgroundImage = cs.backgroundImage;
+  inner.style.cssText = 'padding:1rem;transform:translateY(' + (-y) + 'px)';
+  inner.innerHTML = html.replace(/ id="[^"]*"/g, '');
+  g.appendChild(inner); return g;
+}
+function dragStart(dir){
+  var app = $('#app'), W = window.innerWidth;
+  var cur = mkLayer(app.innerHTML, window.scrollY), other = mkLayer(viewHtml(dir), 0);
+  var top = dir === 'prof' ? other : cur, under = dir === 'prof' ? cur : other;
+  under.style.zIndex = 10; top.style.zIndex = 11; top.style.boxShadow = '0 0 2rem rgba(0,0,0,.55)';
+  top.style.transform = dir === 'prof' ? 'translateX(-100%)' : 'none';
+  document.body.appendChild(under); document.body.appendChild(top);
+  app.style.visibility = 'hidden';
+  DRAG = {dir: dir, top: top, under: under, W: W};
+}
+function dragMove(dx){
+  if (!DRAG) return;
+  var x = DRAG.dir === 'prof' ? Math.min(0, Math.max(-DRAG.W, -DRAG.W + dx)) : Math.min(0, Math.max(-DRAG.W, dx));
+  DRAG.top.style.transition = 'none'; DRAG.top.style.transform = 'translateX(' + x + 'px)';
+}
+function dragEnd(commit){
+  if (!DRAG) return;
+  var d = DRAG; DRAG = null;
+  var target = d.dir === 'prof' ? (commit ? 0 : -d.W) : (commit ? -d.W : 0);
+  d.top.style.transition = 'transform .24s cubic-bezier(.22,.8,.25,1)'; d.top.style.transform = 'translateX(' + target + 'px)';
+  setTimeout(function(){
+    var app = $('#app');
+    if (commit) { TAB = d.dir; window.scrollTo(0, 0); haptic('light'); render(); }
+    if (d.top.parentNode) d.top.remove(); if (d.under.parentNode) d.under.remove();
+    if (app) app.style.visibility = '';
+  }, 250);
+}
 document.addEventListener('touchstart', function(e){
   var t = e.target;
-  if (e.touches.length !== 1 || (t.closest && t.closest('#sheet,input,textarea,.chips,.seg,canvas'))) { sw = null; return; }
-  sw = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+  if (DRAG || e.touches.length !== 1 || (t.closest && t.closest('#sheet,input,textarea,.chips,.seg,canvas'))) { sw = null; return; }
+  sw = {x: e.touches[0].clientX, y: e.touches[0].clientY, on: false, lx: e.touches[0].clientX, lt: Date.now(), v: 0};
 }, {passive: true});
+document.addEventListener('touchmove', function(e){
+  if (!sw || !e.touches.length || GATE || $('#sheet.on')) return;
+  var x = e.touches[0].clientX, dx = x - sw.x, dy = e.touches[0].clientY - sw.y;
+  if (!sw.on) {
+    if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5) { var dir = swipeDir(dx); if (!dir) { sw = null; return; } sw.on = true; dragStart(dir); }
+    else return;
+  }
+  if (e.cancelable) e.preventDefault();
+  var now = Date.now(); if (now > sw.lt) sw.v = (x - sw.lx) / (now - sw.lt); sw.lx = x; sw.lt = now;
+  dragMove(dx);
+}, {passive: false});
 document.addEventListener('touchend', function(e){
-  if (!sw || !e.changedTouches.length || GATE || $('#sheet.on')) { sw = null; return; }
-  var dx = e.changedTouches[0].clientX - sw.x, dy = e.changedTouches[0].clientY - sw.y; sw = null;
-  var nt = (Math.abs(dx) >= 80 && Math.abs(dx) >= Math.abs(dy) * 2) ? swipeDir(dx) : null;
-  if (!nt) return;
-  var gh = ghostSnap(); TAB = nt; window.scrollTo(0, 0); haptic('light'); render(); curtainRun(gh, nt === 'prof');
+  if (!sw) return;
+  var s0 = sw; sw = null;
+  if (!s0.on || !DRAG || !e.changedTouches.length) return;
+  var dx = e.changedTouches[0].clientX - s0.x, W = DRAG.W, go = DRAG.dir === 'prof' ? dx : -dx;
+  dragEnd(go > W * 0.3 || (go > 30 && (DRAG.dir === 'prof' ? s0.v : -s0.v) > 0.4));
 }, {passive: true});
+document.addEventListener('touchcancel', function(){ sw = null; if (DRAG) dragEnd(false); }, {passive: true});
 
 
 $('#file').addEventListener('change', function(e){
