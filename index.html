@@ -1226,11 +1226,13 @@ function accountCard(){
     (WS ? '<button class="btn ghost" style="margin-top:0.625rem" data-act="weblogout">'+ic('logout',22)+' Выйти из аккаунта</button>' : '') + '</div>';
 }
 function ownCached(){ try { return localStorage.getItem('kp_own') === '1'; } catch (e) { return false; } }
+var AVC = [['#6366f1','#8b8ff8'],['#12a574','#22c88a'],['#e8913a','#f2b04e'],['#e5466a','#f06b8a'],['#2f7fe8','#55a6f5'],['#1d2547','#323e6e']];
+function avaStyle(){ var c = AVC[P().avc | 0] || AVC[0]; return 'background:linear-gradient(135deg,' + c[0] + ',' + c[1] + ');color:#fff'; }
 function vProf(){
   var nm = userName() || 'Профиль', st = PLAN && PLAN.status;
   var chip = st === 'premium' ? 'Премиум' : (st === 'trial' ? 'Пробный период' : 'Бесплатный тариф');
   return '<div class="top"><div><div class="title">Профиль</div></div></div>' +
-    '<div class="card prof"><div class="ava">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span class="pchip '+(st === 'premium' ? 'gold' : '')+'">'+(st === 'premium' ? '★ ' : '')+chip+'</span>'+(premMerged() ? '<div class="psub">'+premText()+'</div>' : '')+'</div></div>' +
+    '<div class="card prof" data-act="avedit" style="cursor:pointer"><div class="ava" style="'+avaStyle()+'">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span class="pchip '+(st === 'premium' ? 'gold' : '')+'">'+(st === 'premium' ? '★ ' : '')+chip+'</span>'+(premMerged() ? '<div class="psub">'+premText()+'</div>' : '')+'</div></div>' +
     '<div class="plan slim setlink" data-act="opensettings">'+ic('gear',20)+'<b>Настройки</b><span>›</span></div>' +
     ((PLAN ? PLAN.owner : ownCached()) ? '<div class="plan slim setlink" data-act="stats">'+ic('chart',20)+'<b>Статистика</b><span>›</span></div>' : '') +
     planCard() + (scope === 'me' ? workListCard() : '') + recurCard() + familyCard() + refCard() + accountCard() + supportCard() +
@@ -1798,6 +1800,20 @@ var ACT = {
   stats: function(){ api('GET', '/api/admin/stats').then(statsSheet).catch(function(){ toast('Не удалось загрузить статистику'); }); },
   theme: function(d){ P().theme = d.v; markDirty('me'); haptic(); render(); },
   moreth: function(){ MORE_TH = true; render(); },
+  avedit: function(){
+    var nm = userName() || 'Профиль';
+    sheet('<h3>Профиль</h3><div style="display:flex;justify-content:center;margin:.6rem 0"><div class="ava" id="av-prev" style="width:5.5rem;height:5.5rem;border-radius:50%;display:grid;place-items:center;font:800 2.4rem var(--fd,inherit);' + avaStyle() + '">' + esc(nm.charAt(0).toUpperCase()) + '</div></div>' +
+      '<label>Цвет аватара</label><div style="display:flex;gap:.7rem;justify-content:center;margin:.4rem 0 .8rem">' + AVC.map(function(c, i){
+        return '<button data-act="avpick" data-i="' + i + '" aria-label="Цвет ' + (i + 1) + '" style="width:2.6rem;height:2.6rem;border-radius:50%;background:linear-gradient(135deg,' + c[0] + ',' + c[1] + ');box-shadow:' + ((P().avc | 0) === i ? '0 0 0 .18rem var(--card),0 0 0 .32rem #fff' : 'none') + '"></button>'; }).join('') + '</div>' +
+      '<label>Имя</label><input id="av-name" value="' + esc(P().name || userName() || '') + '" placeholder="Как вас называть" autocomplete="off">' +
+      '<button class="btn big" data-act="avsave">Сохранить</button>');
+  },
+  avpick: function(d){
+    P().avc = +d.i; markDirty('me'); haptic();
+    var pv = $('#av-prev'); if (pv) pv.style.background = 'linear-gradient(135deg,' + AVC[+d.i][0] + ',' + AVC[+d.i][1] + ')';
+    document.querySelectorAll('#sheet [data-act=avpick]').forEach(function(b){ b.style.boxShadow = (+b.dataset.i === +d.i) ? '0 0 0 .18rem var(--card),0 0 0 .32rem #fff' : 'none'; });
+  },
+  avsave: function(){ var n = $('#av-name').value.trim(); if (n) P().name = n; markDirty('me'); closeSheet(); render(); toast('Сохранено'); },
   lessth: function(){ MORE_TH = false; render(); },
   snow: function(d){ P().snow = d.v === '1'; markDirty('me'); haptic(); render(); },
   scale: function(d){ P().scale = d.v; markDirty('me'); haptic(); render(); },
