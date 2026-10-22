@@ -977,21 +977,6 @@ function streakInfo(){
   return {n: n, today: wrote};
 }
 function debtLeft(d){ return Math.max(0, d.total - sum((d.payments || []).map(function(p){ return p.amount; }))); }
-function upcomingBills(){
-  var t = today(), k = curKey(), total = 0;
-  (S.recurring || []).forEach(function(r){
-    if (r.from && r.from > k) return;
-    var date = k + '-' + pad(Math.min(r.day, dim()));
-    if (date > t) total += r.amount;
-  });
-  (S.debts || []).forEach(function(d){
-    if (d.kind === 'owed' || !(d.pay > 0) || debtLeft(d) <= 0) return;
-    var date = k + '-' + pad(Math.min(d.day || 1, dim()));
-    var paid = (d.payments || []).some(function(p){ return p.date.slice(0,7) === k; });
-    if (date > t && !paid) total += Math.min(d.pay, debtLeft(d));
-  });
-  return total;
-}
 /* сколько ещё нужно отложить в этом месяце по планам целей (в т.ч. подушки) */
 function goalReserve(k){
   var t = 0;
