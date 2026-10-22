@@ -1286,9 +1286,17 @@ function removeDebtPay(d, p){
 }
 
 function avgSpend(){
-  var n = new Date(), vals = [];
-  for (var i = 0; i < 3; i++) { var d = new Date(n.getFullYear(), n.getMonth() - i, 1), v = spentOf(mk(d.getFullYear(), d.getMonth())); if (v > 0) vals.push(v); }
-  return vals.length ? Math.round(sum(vals) / vals.length / 1000) * 1000 || Math.round(sum(vals) / vals.length) : 0;
+  var n = new Date(), prev = [], cur = 0, i, d, v;
+  for (i = 1; i <= 3; i++) { d = new Date(n.getFullYear(), n.getMonth() - i, 1); v = spentOf(mk(d.getFullYear(), d.getMonth())); if (v > 0) prev.push(v); }
+  cur = spentOf(realKey());
+  function rnd(x){ return x >= 10000 ? Math.round(x / 1000) * 1000 : Math.round(x / 100) * 100; }
+  if (prev.length) return {v: rnd(sum(prev) / prev.length), src: 'по вашим тратам за прошлые месяцы'};
+  if (cur > 0) return {v: rnd(cur), src: 'по тратам этого месяца'};
+  var plan = sum(S.cats.map(function(c){ return c.limit > 0 ? c.limit : 0; })) + sum((S.recurring || []).map(function(r){ return r.amount || 0; })) + sum((S.debts || []).filter(function(x){ return x.kind !== 'owed' && debtLeft(x) > 0; }).map(function(x){ return x.pay || 0; }));
+  if (plan > 0) return {v: rnd(plan), src: 'по лимитам, регулярным платежам и кредитам'};
+  var inc = baseIncome(realKey());
+  if (inc > 0) return {v: rnd(inc * 0.7), src: 'примерно 70% от вашего дохода'};
+  return {v: 0, src: ''};
 }
 function cushionCard(){
   if (S.goals.some(function(g){ return g.cushion; })) return '';
@@ -1297,8 +1305,8 @@ function cushionCard(){
 }
 var cuM = 3;
 function openCushion(){
-  var avg = avgSpend(); cuM = 3;
-  sheet('<h3>Подушка безопасности</h3><div class="hi" style="margin:.1rem .25rem .6rem;font-weight:600">' + (avg ? 'Ваши расходы ≈ ' + fmt(avg) + ' в месяц' : 'Пока мало данных о расходах, введите сумму сами') + '</div>' +
+  var est = avgSpend(), avg = est.v; cuM = 3;
+  sheet('<h3>Подушка безопасности</h3><div class="hi" style="margin:.1rem .25rem .6rem;font-weight:600">' + (avg ? 'Ваши расходы ≈ ' + fmt(avg) + ' в месяц (' + est.src + ')' : 'Пока нет данных о расходах и доходе, введите сумму сами') + '</div>' +
     '<label>На сколько месяцев жизни</label><div class="chips" id="cu-ch">' + [3, 6, 12].map(function(m){ return '<button class="chip ' + (m === 3 ? 'on' : '') + '" data-act="cumon" data-v="' + m + '">' + m + ' мес</button>'; }).join('') + '</div>' +
     amtCard('cu-target', 'Сколько нужно накопить', avg ? avg * 3 : '', 'target') +
     '<button class="btn big" data-act="savecushion">Создать</button>');
@@ -1863,7 +1871,7 @@ var ACT = {
   newcushion: function(){ if (S.goals.length >= 1 && gate('Несколько целей')) return; openCushion(); },
   cumon: function(d, el){
     cuM = Number(d.v); document.querySelectorAll('#cu-ch .chip').forEach(function(b){ b.classList.toggle('on', b === el); });
-    var a = avgSpend(); if (a) { $('#cu-target').value = String(a * cuM); fmtAllFields($('#sheet')); }
+    var a = avgSpend().v; if (a) { $('#cu-target').value = String(a * cuM); fmtAllFields($('#sheet')); }
   },
   savecushion: function(){
     var t = num($('#cu-target').value); if (t <= 0) { toast('Укажите сумму'); return; }
