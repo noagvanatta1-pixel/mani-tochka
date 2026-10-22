@@ -596,6 +596,9 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .cushion .cu-h span:not(.cu-i){display:block;color:var(--muted);font-size:.9375rem;font-weight:600;margin-top:.125rem}
 
 .gc .ib{z-index:5}.gc .badge{z-index:5}.gc .gover{z-index:3;pointer-events:none}.gc .gover .gname{pointer-events:auto}
+
+.gc .gimg .ph.cush{background:radial-gradient(circle at 50% 38%,rgba(255,255,255,.28),transparent 55%),repeating-linear-gradient(135deg,rgba(255,255,255,.06) 0 .6rem,transparent .6rem 1.2rem);padding-bottom:2.5rem;position:relative;z-index:2}
+.gc .gimg .ph.cush .phc{width:5.5rem;height:5.5rem;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;border:.1875rem solid rgba(255,255,255,.75);border-style:solid;background:rgba(255,255,255,.2);box-shadow:0 0 2rem rgba(80,255,200,.45)}
 </style>
 </head>
 <body>
@@ -1093,11 +1096,11 @@ function goalsSummary(){
 
 function goalCard(g, manage){
   var s = saved(g), p = pct(s, g.target), isMain = S.mainGoal === g.id, done = g.target > 0 && s >= g.target;
-  var hue = done ? 45 : (S.goals.indexOf(g) * 53 + 255) % 360;
-  var img = g.img ? '<img src="'+g.img+'" alt="">' : '<div class="ph add"'+(manage ? ' data-act="photo" data-id="'+g.id+'"' : '')+'><span class="phc">'+ic('camera',30)+'</span><b>Добавить фото цели</b></div>';
+  var hue = g.cushion ? 165 : (done ? 45 : (S.goals.indexOf(g) * 53 + 255) % 360);
+  var img = g.cushion ? '<div class="ph cush"><span class="phc">'+ic('shield',44)+'</span></div>' : g.img ? '<img src="'+g.img+'" alt="">' : '<div class="ph add"'+(manage ? ' data-act="photo" data-id="'+g.id+'"' : '')+'><span class="phc">'+ic('camera',30)+'</span><b>Добавить фото цели</b></div>';
   var tools = manage ? ((!isMain ? '<button class="ib star" data-act="maingoal" data-id="'+g.id+'" aria-label="Сделать основной">'+ic('star',22)+'</button>' : '') +
     '<button class="ib del" data-act="delgoal" data-id="'+g.id+'" aria-label="Удалить">'+ic('trash',22)+'</button>' +
-    (g.img ? '<button class="ib cam" data-act="photo" data-id="'+g.id+'" aria-label="Фото">'+ic('camera',22)+'</button>' : '')) : '';
+    (g.img && !g.cushion ? '<button class="ib cam" data-act="photo" data-id="'+g.id+'" aria-label="Фото">'+ic('camera',22)+'</button>' : '')) : '';
   var left = Math.max(0, g.target - s);
   return '<div class="card gc'+(done ? ' done' : '')+'" style="--gh:'+hue+'"><div class="gimg">'+img+'<div class="gshade"></div>'+(isMain ? '<span class="badge">Основная</span>' : '')+tools +
     '<div class="gover"><div class="gname" data-act="editgoal" data-id="'+g.id+'">'+esc(g.name)+'</div><span class="gring" style="--p:'+Math.min(100, p)+'"><b>'+p+'%</b></span></div></div>' +
@@ -1330,6 +1333,8 @@ function cuHint(){
 }
 function vGoals(){
   var h = '<div class="top"><div><div class="title">Мои цели</div><div class="hi" style="margin-top:0.25rem">Выберите основную — она будет на главной</div></div></div>';
+  var cg = S.goals.filter(function(g){ return g.cushion; })[0];
+  if (cg && !S.cushMain) { S.cushMain = true; S.mainGoal = cg.id; save(); }
   var list = S.goals.slice().sort(function(a,b){ return (b.id === S.mainGoal) - (a.id === S.mainGoal); });
   h += goalsSummary() + cushionCard();
   h += list.length ? list.map(function(g){ return goalCard(g, true); }).join('') : '<div class="card empty">Целей пока нет</div>';
@@ -1898,7 +1903,7 @@ var ACT = {
     var t = num($('#cu-target').value); if (t <= 0) { toast('Укажите сумму'); return; }
     var g = cuId ? goalById(cuId) : null;
     if (g) { g.target = t; g.cm = cuM; g.pct = cuP; }
-    else { var n = {id: uid(), name: 'Подушка безопасности', target: t, img: '', contribs: [], cushion: true, cm: cuM, pct: cuP}; S.goals.push(n); if (!S.mainGoal) S.mainGoal = n.id; }
+    else { var n = {id: uid(), name: 'Подушка безопасности', target: t, img: '', contribs: [], cushion: true, cm: cuM, pct: cuP}; S.goals.push(n); S.mainGoal = n.id; S.cushMain = true; }
     save(); closeSheet(); render(); toast(g ? 'Сохранено' : 'Подушка создана');
   },
   newgoal: function(){ if (S.goals.length >= 1 && gate('Несколько целей')) return; openGoal(); },
