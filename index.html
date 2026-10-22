@@ -529,6 +529,7 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .ht .hi2{width:2.3rem;height:2.3rem;border-radius:.75rem;display:flex;align-items:center;justify-content:center;color:#fff;flex:none}
 .ht b{font-size:1rem;font-weight:800;flex:1;min-width:0}
 .ht em{flex-basis:100%;font-style:normal;font-size:.75rem;font-weight:600;color:var(--muted);margin-top:.35rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.legal{display:flex;justify-content:center;gap:1.2rem;flex-wrap:wrap;margin:.7rem 0 .2rem}.legal a{font-size:.78rem;font-weight:600;color:var(--muted);text-decoration:underline;text-underline-offset:.15rem;cursor:pointer}
 </style>
 </head>
 <body>
@@ -2300,9 +2301,8 @@ function planCard(){
 function supportCard(){
   if (!ONLINE) return '';
   var sup = PLAN && PLAN.support;
-  return '<div class="card set"><label style="margin-top:0">Помощь</label>' +
-    (sup ? '<button class="btn ghost" data-act="support">Написать в поддержку</button>' : '') +
-    '<div class="tog" style="margin-top:.4rem"><a data-act="legal" data-v="privacy" style="color:var(--pink-d);font-weight:700">Политика конфиденциальности</a><a data-act="legal" data-v="terms" style="color:var(--pink-d);font-weight:700">Условия подписки</a></div></div>';
+  return (sup ? '<div class="plan slim setlink" data-act="support">' + ic('phone', 20) + '<b>Написать в поддержку</b><span>›</span></div>' : '') +
+    '<div class="legal"><a data-act="legal" data-v="privacy">Политика конфиденциальности</a><a data-act="legal" data-v="terms">Условия подписки</a></div>';
 }
 var PW_WHAT = '';
 function openPaywall(what){
