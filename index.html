@@ -479,6 +479,22 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .chip[style*="--ch"]{border:1px solid hsl(var(--ch) 70% 60%/.32)}
 .chip[style*="--ch"] .ci{color:hsl(var(--ch) 80% 72%);background:hsl(var(--ch) 75% 55%/.28);border-radius:.5rem;box-shadow:0 0 10px hsl(var(--ch) 85% 60%/.35)}
 .chip.on[style*="--ch"] .ci{color:#fff;background:transparent;box-shadow:none}
+
+/* карточка ввода суммы */
+.amtcard{margin:.7rem 0 .5rem;border-radius:1.5rem;padding:1rem 1.1rem 1.1rem;background:linear-gradient(135deg,var(--bal1),var(--bal2));color:#fff;position:relative;overflow:hidden;box-shadow:0 .6rem 1.4rem rgba(var(--sh),.25)}
+.amtcard:before{content:"";position:absolute;right:-3rem;top:-3.5rem;width:11rem;height:11rem;border-radius:50%;background:rgba(255,255,255,.12);pointer-events:none}
+.amtcard .ac-top{display:flex;align-items:center;gap:.65rem;position:relative}
+.amtcard .ac-ico{width:2.5rem;height:2.5rem;border-radius:.9rem;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;flex:none}
+.amtcard .ac-lbl{flex:1;font-size:1rem;font-weight:600;opacity:.92}
+.amtcard .ac-cur{font-size:.9rem;font-weight:800;padding:.35rem .8rem;border-radius:2rem;background:rgba(255,255,255,.22)}
+.panel .amtcard .amtbox{justify-content:flex-start;margin:.7rem 0 0;position:relative}
+.panel .amtcard .amtbox input{color:#fff;text-align:left;font-size:clamp(30px,11vw,3rem);font-weight:800;padding:0;letter-spacing:-.02em;caret-color:#fff}
+.panel .amtcard .amtbox input::placeholder{color:rgba(255,255,255,.45)}
+/* быстрые кнопки */
+.qrow{display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem;margin:0 0 .9rem}
+.qrow button{display:flex;flex-direction:column;align-items:center;gap:.4rem;font-size:.75rem;font-weight:700;color:var(--ink)}
+.qrow .qi{width:3.6rem;height:3.6rem;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--card);color:var(--pink-d);box-shadow:inset 0 0 0 1px var(--line),0 .25rem .8rem rgba(var(--sh),.1)}
+.qrow button:active .qi{transform:scale(.94)}
 </style>
 </head>
 <body>
@@ -552,6 +568,7 @@ var I = {
   logout:'<path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M16 8l4 4-4 4M20 12H10"/>',
   gear:'<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
+  repeat:'<path d="M4 12a8 8 0 0 1 13.5-5.8L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.5 5.8L4 16"/><path d="M4 20v-4h4"/>',
   pencil:'<path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/>',
   trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
   camera:'<path d="M4 8h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/>',
@@ -998,12 +1015,18 @@ function goalMini(g){
     '<div class="bar"><i style="width:'+p+'%"></i></div></div>';
 }
 
+function quickRow(){
+  var q = [['addop','plus','Добавить'],['plan','calc','Бюджет'],['newrec','repeat','Регулярные'],['tab:an','chart','График']];
+  return '<div class="qrow">' + q.map(function(x){
+    var a = x[0].indexOf('tab:') === 0 ? 'data-tab="' + x[0].slice(4) + '"' : 'data-act="' + x[0] + '"';
+    return '<button ' + a + '><span class="qi">' + ic(x[1], 24) + '</span>' + x[2] + '</button>'; }).join('') + '</div>';
+}
 function vHome(){
   var k = curKey(), h = webBar() + monthHeader(true) + trialBar();
   var g = goalById(S.mainGoal) || S.goals[0];
   h += '<div class="bal"><div class="lbl">Осталось в этом месяце</div><div class="big">'+fmt(leftOf(k))+'</div>' +
     '<div class="row"><div class="mini tap" data-act="inclist"><span>Доход</span><b>'+fmt(incomeOf(k))+'</b></div><div class="mini tap" data-act="spentlist"><span>Потрачено</span><b>'+fmt(spentOf(k))+'</b></div></div></div>';
-  h += alertCard(k) + streakChip() + summaryBanner();
+  h += quickRow() + alertCard(k) + streakChip() + summaryBanner();
   if (g) h += goalMini(g);
   h += workCard();
   h += '<div class="plan slim" data-act="plan">'+ic('calc',20)+'<b>Спланировать бюджет</b><span>›</span></div>';
@@ -1398,13 +1421,17 @@ function updFx(){
   box.style.display = 'flex';
   var cv = $('#f-conv'); if (cv) cv.textContent = a > 0 && r > 0 ? '≈ ' + fmt(a * r) : (r > 0 ? '' : 'укажите курс');
 }
+function amtCard(id, label, val, icon, symId){
+  return '<div class="amtcard"><div class="ac-top"><span class="ac-ico">' + ic(icon || 'wallet', 22) + '</span><span class="ac-lbl"' + (id === 'f-amt' ? ' id="f-lbl"' : '') + '>' + label + '</span><span class="ac-cur"' + (symId ? ' id="' + symId + '"' : '') + '>' + SYM() + '</span></div>' +
+    '<div class="amtbox"><input id="' + id + '" inputmode="decimal" placeholder="0" autocomplete="off"' + (val ? ' value="' + val + '"' : '') + '></div></div>';
+}
 function openOp(catId, keepSwitch){
   opType = 'expense'; opCur = baseCode(); opCat = (catId && catById(catId)) ? catId : (S.cats[0] ? S.cats[0].id : '');
   var d = isCur() ? today() : mk(VM.y, VM.m) + '-01';
   var fromCat = !keepSwitch && !!(catId && catById(catId));   // открыли с карточки категории: это всегда расход, переключатель не нужен
   sheet('<h3>Новая операция</h3>' +
     (fromCat ? '' : '<div class="seg"><button class="on" data-act="optype" data-v="expense">Расход</button><button data-act="optype" data-v="income">Доход</button></div>') +
-    '<div class="amtbox"><input id="f-amt" inputmode="decimal" placeholder="0" autocomplete="off"><span id="f-sym">'+SYM()+'</span></div>' + curRow() + recentChips() +
+    amtCard('f-amt', 'Сумма расхода', '', 'wallet', 'f-sym') + curRow() + recentChips() +
     '<div id="f-cats"><label>Категория</label><div class="cgrid">' + S.cats.map(function(c){ return '<button class="cg '+(c.id === opCat ? 'on' : '')+'" style="--ch:'+((S.cats.indexOf(c) * 47 + 20) % 360)+'" data-act="opcat" data-id="'+c.id+'"><b>'+ci(c.emoji)+'</b>'+esc(c.name)+'</button>'; }).join('') + '<button class="cg add" data-act="opnewcat"><b>+</b>Своя</button></div></div>' +
     '<label>Комментарий</label><input id="f-note" placeholder="Необязательно" autocomplete="off">' +
     '<label>Дата</label><div class="row2"><button class="chip '+(isCur() ? 'on' : '')+'" data-act="opdate" data-v="0">Сегодня</button><button class="chip" data-act="opdate" data-v="1">Вчера</button><input id="f-date" type="date" value="'+d+'"></div>' +
@@ -1491,7 +1518,7 @@ function updGoal(){
 function openContrib(id){
   editId = id; var g = goalById(id); if (!g) return;
   sheet('<h3>'+esc(g.name)+'</h3><div class="hi" style="margin:.2rem 0 0">Накоплено '+fmt(saved(g))+' из '+fmt(g.target)+'</div>' +
-    '<div class="amtbox"><input id="k-amt" inputmode="decimal" placeholder="0" autocomplete="off"><span>'+SYM()+'</span></div>' +
+    amtCard('k-amt', 'Сколько добавить', '', 'target') +
     '<div class="chips" style="justify-content:center">' + [1000,5000,10000,20000].map(function(v){ return '<button class="chip" data-act="kadd" data-v="'+v+'">+ '+v.toLocaleString('ru-RU')+'</button>'; }).join('') + '</div>' +
     '<div class="preview" id="k-prev" style="display:none;text-align:center"></div>' +
     '<div class="hi" style="margin:.7rem 0 0;font-size:.85rem;text-align:center">Чтобы забрать деньги из цели, введите сумму со знаком «−»</div>' +
@@ -1563,7 +1590,7 @@ var ACT = {
     var x = S.debts.filter(function(y){ return y.id === d.id; })[0]; if (!x) return; dpId = x.id;
     var left = debtLeft(x), def = x.pay > 0 ? Math.min(x.pay, left) : left;
     sheet('<h3>' + (x.kind === 'owed' ? 'Возврат долга' : 'Платёж') + '</h3><div class="hi" style="margin:.1rem .25rem .6rem;font-weight:600">' + esc(x.name) + ' · осталось ' + fmt(left) + '</div>' +
-      '<div class="amtbox"><input id="dp-amt" inputmode="decimal" value="' + (def || '') + '" placeholder="0" autocomplete="off"><span>' + SYM() + '</span></div>' +
+      amtCard('dp-amt', 'Сумма платежа', def || '', 'card') +
       '<label>Дата</label><input class="f" id="dp-date" type="date" value="' + today() + '">' +
       '<button class="btn big" data-act="savedebtpay">Записать</button>');
   },
@@ -1617,6 +1644,7 @@ var ACT = {
     opType = d.v;
     document.querySelectorAll('#sheet .seg button').forEach(function(b){ b.classList.toggle('on', b === el); });
     $('#f-cats').style.display = opType === 'expense' ? '' : 'none';
+    var fl = $('#f-lbl'); if (fl) fl.textContent = opType === 'expense' ? 'Сумма расхода' : 'Сумма дохода';
   },
   opfill: function(d){
     if (opType !== 'expense') ACT.optype({v: 'expense'});
@@ -1952,6 +1980,24 @@ function endDrag(){
 }
 document.addEventListener('touchend', endDrag);
 document.addEventListener('touchcancel', endDrag);
+
+/* свайп вправо открывает профиль, влево возвращает на главную */
+var sw = null;
+document.addEventListener('touchstart', function(e){
+  var t = e.target;
+  if (e.touches.length !== 1 || (t.closest && t.closest('#sheet,input,textarea,.chips,.seg,canvas'))) { sw = null; return; }
+  sw = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+}, {passive: true});
+document.addEventListener('touchend', function(e){
+  if (!sw || !e.changedTouches.length || GATE || $('#sheet .panel')) { sw = null; return; }
+  var dx = e.changedTouches[0].clientX - sw.x, dy = e.changedTouches[0].clientY - sw.y; sw = null;
+  if (Math.abs(dx) < 80 || Math.abs(dx) < Math.abs(dy) * 2) return;
+  var nt = null;
+  if (dx > 0 && TAB !== 'prof' && TAB !== 'set') nt = 'prof';
+  else if (dx < 0 && (TAB === 'prof' || TAB === 'set')) nt = 'home';
+  if (nt) { TAB = nt; window.scrollTo(0, 0); haptic('light'); render(); }
+}, {passive: true});
+
 
 $('#file').addEventListener('change', function(e){
   var f = e.target.files[0]; e.target.value = '';
