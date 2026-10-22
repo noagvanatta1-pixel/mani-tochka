@@ -1943,7 +1943,7 @@ var ACT = {
   delaccount: function(){
     confirmBox('Удалить все ваши данные с сервера? Это нельзя отменить.', function(){
       api('DELETE', '/api/account').then(function(){
-        S = defaults(); slots.me = newSlot(); slots.me.s = S; slots.fam = newSlot(); scope = 'me'; FAM = null;
+        S = defaults(); slots.me = newSlot(); slots.me.s = S; slots.fam = newSlot(); scope = 'me'; saveScope(); FAM = null;
         try { localStorage.removeItem(KEY); localStorage.removeItem(KEY + '_fam'); } catch(e){}
         render(); toast('Данные удалены');
       }).catch(function(){ toast('Не удалось удалить. Попробуйте позже'); });
@@ -2045,7 +2045,7 @@ var ACT = {
   famleave: function(){
     confirmBox('Выйти из семьи? Общие данные останутся у партнёра, ваши личные не пострадают.', function(){
       api('POST', '/api/family/leave').then(function(r){
-        if (scope === 'fam') { slots.fam.s = S; scope = 'me'; S = slots.me.s; }
+        if (scope === 'fam') { slots.fam.s = S; scope = 'me'; saveScope(); S = slots.me.s; }
         slots.fam = newSlot(); try { localStorage.removeItem(KEY + '_fam'); } catch(e){}
         FAM = r; closeSheet(); render(); toast('Вы вышли из семьи');
       }).catch(function(){ toast('Не удалось выйти'); });
@@ -2524,14 +2524,15 @@ function loadFam(){
     throw e;
   });
 }
+function saveScope(){ try { localStorage.setItem(KEY + '_scope', scope); } catch (e) {} }
 function setScope(to){
   if (to === scope) return;
   if (to === 'fam') {
     if (!FAM || !FAM.family) { openFamily(); return; }
-    var go = function(){ slots[scope].s = S; scope = 'fam'; S = slots.fam.s; applyRecurring(); if (TAB === 'prof') TAB = 'home'; window.scrollTo(0, 0); render(); haptic('light'); toast('Вы перешли в семейный бюджет'); };
+    var go = function(){ slots[scope].s = S; scope = 'fam'; saveScope(); S = slots.fam.s; applyRecurring(); if (TAB === 'prof') TAB = 'home'; window.scrollTo(0, 0); render(); haptic('light'); toast('Вы перешли в семейный бюджет'); };
     if (slots.fam.s) go(); else loadFam().then(go).catch(function(){ toast('Не удалось загрузить семью'); });
   } else {
-    slots[scope].s = S; scope = 'me'; S = slots.me.s; if (TAB === 'prof') TAB = 'home'; window.scrollTo(0, 0); render(); haptic('light'); toast('Вы перешли в личный бюджет');
+    slots[scope].s = S; scope = 'me'; saveScope(); S = slots.me.s; if (TAB === 'prof') TAB = 'home'; window.scrollTo(0, 0); render(); haptic('light'); toast('Вы перешли в личный бюджет');
   }
 }
 function openFamily(){
@@ -2882,6 +2883,15 @@ function boot(){
       return;
     }
     setState('me', normalize(S)); syncState = 'offline'; toast('Нет связи с сервером. Работаю офлайн');
+  }).then(function(){
+    if (blocked) return;
+    var want = ''; try { want = localStorage.getItem(KEY + '_scope') || ''; } catch (e) {}
+    if (ONLINE && want === 'fam') {
+      return loadFamInfo().then(function(){
+        if (!FAM || !FAM.family) { saveScope(); return; }
+        return (slots.fam.s ? Promise.resolve() : loadFam()).then(function(){ slots.me.s = S; scope = 'fam'; S = slots.fam.s; });
+      }).catch(function(){});
+    }
   }).then(function(){
     if (blocked) return;
     applyRecurring();
