@@ -1328,9 +1328,15 @@ function vAn(){
 
 function accountCard(){
   if (!ONLINE) return '<div class="card set"><label style="margin-top:0">Режим без аккаунта</label><div class="hi" style="margin:0 0.25rem">Данные хранятся только на этом устройстве. Войдите, чтобы они сохранялись на сервере и не пропадали.</div>' + (IN_TG ? '' : '<button class="btn big" style="margin-top:.8rem" data-act="weblogin">Войти или создать аккаунт</button>') + '</div>';
+  return '';   // вошедшему пользователю аккаунт показывается внизу настроек
+}
+function accountDanger(){
+  if (!ONLINE) return '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button></div>';
   var st = syncState === 'ok' ? '☁️ Данные сохраняются на сервере' : (syncState === 'offline' ? '⚠️ Нет связи с сервером — сохраню, как только появится' : 'Подключаюсь…');
   return '<div class="card set"><label style="margin-top:0">Аккаунт</label><div class="hi" style="margin:0 0.25rem 0.875rem"><b style="color:var(--ink)">'+esc(tgUser.first_name || 'Вы')+'</b><br>'+st+'</div>' +
-    (WS ? '<button class="btn ghost" style="margin-top:0" data-act="weblogout">'+ic('logout',22)+' Выйти из аккаунта</button>' : '') + '</div>';
+    (WS ? '<button class="btn ghost" style="margin-top:0" data-act="weblogout">'+ic('logout',22)+' Выйти из аккаунта</button>' : '') +
+    '<button class="btn danger" style="margin-top:0.625rem" data-act="reset">Сбросить все данные</button>' +
+    '<button class="btn danger" style="margin-top:0.625rem" data-act="delaccount">Удалить мои данные с сервера</button></div>';
 }
 function ownCached(){ try { return localStorage.getItem('kp_own') === '1'; } catch (e) { return false; } }
 var AVC = [['#6366f1','#8b8ff8'],['#12a574','#22c88a'],['#e8913a','#f2b04e'],['#e5466a','#f06b8a'],['#2f7fe8','#55a6f5'],['#1d2547','#323e6e']];
@@ -1365,7 +1371,7 @@ function vSet(){
     '<div class="hi" style="margin:.4rem .25rem 0;font-size:.8rem;font-weight:600">Бюджет считается по «от», чтобы хватало и в слабый месяц. «До» — необязательно.</div>' +
     '<button class="btn big" data-act="savesettings">Сохранить</button></div>' +
     themeCard() + currencyCard() + familyCard() + remindCard() + exportCard() +
-    '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button>' + (ONLINE ? '<button class="btn danger" style="margin-top:0.625rem" data-act="delaccount">Удалить мои данные с сервера</button>' : '') + '</div>';
+    accountDanger();
 }
 
 /* ===== Гирлянда-зигзаг на фоне (тема «Новый год») ===== */
