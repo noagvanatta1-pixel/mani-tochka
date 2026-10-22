@@ -552,6 +552,7 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .lchips>div{background:rgba(127,127,160,.12);border-radius:.9rem;padding:.5rem .7rem}
 .lchips span{display:block;font-size:.7rem;font-weight:600;color:var(--muted)}.lchips b{font-size:.9rem;font-weight:800}
 .dwarn{margin:.3rem 0;font-size:.82rem;font-weight:700;color:var(--red)}
+.dpchips{margin:.5rem 0 .6rem}.dpchips .chip b{font-weight:800}
 </style>
 </head>
 <body>
@@ -1706,6 +1707,10 @@ var ACT = {
   gosummary: function(d){ var p = d.k.split('-'); VM.y = +p[0]; VM.m = +p[1] - 1; TAB = 'an'; window.scrollTo(0, 0); render(); },
   newdebt: function(d){ if ((S.debts || []).length >= 1 && gate('Несколько долгов')) return; openDebt(null, d && d.k); },
   dlend: function(d, el){ dLend = d.v === '1'; document.querySelectorAll('#d-lend button').forEach(function(b){ b.classList.toggle('on', b === el); }); },
+  dpfill: function(d, el){
+    var i = $('#dp-amt'); if (!i) return; i.value = String(d.v); fmtAllFields($('#sheet')); haptic('light');
+    document.querySelectorAll('.dpchips .chip').forEach(function(b){ b.classList.toggle('on', b === el); });
+  },
   dtab: function(d){ DTAB = d.v; window.scrollTo(0, 0); render(); },
   dremind: function(d){
     var x = S.debts.filter(function(y){ return y.id === d.id; })[0]; if (!x) return;
@@ -1749,9 +1754,16 @@ var ACT = {
   },
   debtpay: function(d){
     var x = S.debts.filter(function(y){ return y.id === d.id; })[0]; if (!x) return; dpId = x.id;
-    var left = debtLeft(x), def = x.kind === 'owed' ? '' : (x.pay > 0 ? Math.min(x.pay, left) : left);
+    var left = debtLeft(x), def = '';
+    var opts = [];
+    if (x.kind !== 'owed') {
+      if (x.pay > 0 && x.pay < left) opts.push(['Платёж', x.pay]);
+      [10, 25, 50].forEach(function(p){ var v = Math.round(left * p / 100); if (v > 0 && v < left && !opts.some(function(o){ return o[1] === v; })) opts.push([p + '%', v]); });
+      opts.push(['Погасить полностью', left]);
+    }
     sheet('<h3>' + (x.kind === 'owed' ? 'Возврат долга' : 'Платёж') + '</h3><div class="hi" style="margin:.1rem .25rem .6rem;font-weight:600">' + esc(x.name) + ' · осталось ' + fmt(left) + '</div>' +
       amtCard('dp-amt', x.kind === 'owed' ? 'Сколько вернули' : 'Сумма платежа', def || '', x.kind === 'owed' ? 'wallet' : 'card') +
+      (opts.length ? '<div class="chips dpchips">' + opts.map(function(o){ return '<button class="chip" data-act="dpfill" data-v="' + o[1] + '"><b>' + o[0] + '</b> ' + fmt(o[1]) + '</button>'; }).join('') + '</div>' : '') +
       '<label>Дата</label><input class="f" id="dp-date" type="date" value="' + today() + '">' +
       '<button class="btn big" data-act="savedebtpay">Записать</button>');
   },
