@@ -497,6 +497,7 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .qrow button:active .qi{transform:scale(.94)}
 
 /* долги */
+.dsub{margin-top:.5rem}.dsub button{font-size:.85rem}
 .dseg button{white-space:nowrap;font-size:.9rem;padding-left:.3rem;padding-right:.3rem}
 .dseg button i{font-style:normal;font-size:.7rem;font-weight:800;margin-left:.25rem;padding:.05rem .4rem;border-radius:1rem;background:rgba(127,127,160,.25)}
 .debt .pav{width:2.9rem;height:2.9rem;border-radius:50%;display:grid;place-items:center;color:#fff;font:800 1.2rem var(--fd,inherit);flex:none}
@@ -1096,7 +1097,7 @@ function debtCard(d){
     '<div class="dmeta">' + meta.join('<br>') + '</div>' + (fc ? '<div class="dmeta">' + fc + '</div>' : '') +
     (po.done ? '' : '<button class="btn ghost" data-act="debtpay" data-id="' + d.id + '">' + (d.kind === 'owed' ? 'Принять возврат' : 'Внести платёж') + '</button>') + '</div>';
 }
-var DTAB = '', dLend = true;
+var DTAB = '', DLAST = 'loan', dLend = true;
 function dShort(ds){ return ds ? ds.slice(8,10) + '.' + ds.slice(5,7) : ''; }
 function dOver(d){ return !!(d.due && d.due < today() && debtLeft(d) > 0); }
 function pHue(n){ var h = 0; String(n).split('').forEach(function(c){ h = (h * 31 + c.charCodeAt(0)) % 360; }); return h; }
@@ -1126,7 +1127,11 @@ function vDebt(){
   list.forEach(function(d){ (debtLeft(d) <= 0 ? by.done : (d.kind === 'owed' ? by.owed : by.loan)).push(d); });
   if (!DTAB || !by[DTAB]) DTAB = by.loan.length ? 'loan' : (by.owed.length ? 'owed' : 'loan');
   var names = {loan: 'Кредиты', owe: 'Я должен', owed: 'Мне должны', done: 'Закрытые'};
-  h += '<div class="seg dseg">' + ['loan', 'owed', 'done'].map(function(k){
+  if (DTAB !== 'done') DLAST = DTAB;
+  var nAct = by.loan.length + by.owed.length;
+  h += '<div class="seg dseg"><button class="' + (DTAB !== 'done' ? 'on' : '') + '" data-act="dtab" data-v="' + DLAST + '">Активные' + (nAct ? ' <i>' + nAct + '</i>' : '') + '</button>' +
+    '<button class="' + (DTAB === 'done' ? 'on' : '') + '" data-act="dtab" data-v="done">Закрытые' + (by.done.length ? ' <i>' + by.done.length + '</i>' : '') + '</button></div>';
+  if (DTAB !== 'done') h += '<div class="seg dseg dsub">' + ['loan', 'owed'].map(function(k){
     return '<button class="' + (k === DTAB ? 'on' : '') + '" data-act="dtab" data-v="' + k + '">' + names[k] + (by[k].length ? ' <i>' + by[k].length + '</i>' : '') + '</button>'; }).join('') + '</div>';
   var cur = by[DTAB], tot = sum(cur.map(debtLeft)), act = cur.filter(function(d){ return debtLeft(d) > 0; });
   var lbl, m1, m2;
@@ -1452,7 +1457,7 @@ function render(){
   try { snowSync(); } catch (e) {}
   try { garlandSync(); } catch (e) {}
   var views = {home:vHome, goals:vGoals, debt:vDebt, an:vAn, set:vSet, prof:vProf};
-  $('#app').innerHTML = (ONLINE && (TAB === 'home' || TAB === 'goals' || TAB === 'debt' || TAB === 'an') ? scopeBar() : '') + views[TAB]();
+  $('#app').innerHTML = views[TAB]();
   var tabs = [['home','Главная','home'],['goals','Цели','target'],['debt','Долги','card'],['an','Аналитика','chart']];
   $('#nav').innerHTML = tabs.map(function(t){ return '<button data-tab="'+t[0]+'" class="'+((t[0] === TAB || (t[0] === 'prof' && TAB === 'set')) ? 'on' : '')+'"><span class="i">'+ic(t[2],26)+'</span>'+t[1]+'</button>'; }).join('');
   $('#fab').style.display = TAB === 'home' ? 'flex' : 'none';
@@ -2305,10 +2310,10 @@ function setScope(to){
   if (to === scope) return;
   if (to === 'fam') {
     if (!FAM || !FAM.family) { openFamily(); return; }
-    var go = function(){ slots[scope].s = S; scope = 'fam'; S = slots.fam.s; applyRecurring(); render(); haptic('light'); };
+    var go = function(){ slots[scope].s = S; scope = 'fam'; S = slots.fam.s; applyRecurring(); if (TAB === 'prof') TAB = 'home'; window.scrollTo(0, 0); render(); haptic('light'); };
     if (slots.fam.s) go(); else loadFam().then(go).catch(function(){ toast('Не удалось загрузить семью'); });
   } else {
-    slots[scope].s = S; scope = 'me'; S = slots.me.s; render(); haptic('light');
+    slots[scope].s = S; scope = 'me'; S = slots.me.s; if (TAB === 'prof') TAB = 'home'; window.scrollTo(0, 0); render(); haptic('light');
   }
 }
 function openFamily(){
@@ -2333,7 +2338,8 @@ function openFamily(){
 function familyCard(){
   if (!ONLINE) return '';
   var f = FAM && FAM.family;
-  return '<div class="card set"><label style="margin-top:0">Семейный бюджет</label>' +
+  return '<div class="card set"><label style="margin-top:0">Какой бюджет показывать</label>' + scopeBar() +
+    '<label>Семейный бюджет</label>' +
     '<div class="hi" style="margin:0 0.25rem .7rem;font-weight:600">' + (f ? 'В семье: ' + f.members.map(function(m){ return esc(m.name || 'Участник'); }).join(' и ') : 'Ведите общий бюджет с партнёром') + '</div>' +
     '<button class="btn ghost" data-act="openfam">' + (f ? 'Управлять семьёй' : 'Создать семью или вступить') + '</button></div>';
 }
