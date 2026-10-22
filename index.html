@@ -1241,7 +1241,7 @@ function currencyCard(){
     '<div class="hi" style="margin:.7rem .25rem 0;font-size:.8rem;font-weight:600">Все суммы показываются в этой валюте. При смене валюты все записи пересчитаются по курсу ЦБ.</div></div>';
 }
 function themeCard(){
-  return '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + themeBtns(['dark', 'pink']) + '</div>' + (MORE_TH || ['dark', 'pink'].indexOf(P().theme || 'dark') < 0 ? '<div class="themes" style="margin-top:.5rem">' + themeBtns(Object.keys(THEMES).filter(function(k){ return k !== 'dark' && k !== 'pink'; })) + '</div>' : '<button class="btn ghost" style="margin-top:.6rem" data-act="moreth">Ещё темы</button>') +
+  return '<div class="card set"><label style="margin-top:0">Тема оформления</label><div class="themes">' + themeBtns(['dark', 'pink']) + '</div>' + (MORE_TH || ['dark', 'pink'].indexOf(P().theme || 'dark') < 0 ? '<div class="themes" style="margin-top:.5rem">' + themeBtns(Object.keys(THEMES).filter(function(k){ return k !== 'dark' && k !== 'pink'; })) + '</div>' + (['dark', 'pink'].indexOf(P().theme || 'dark') >= 0 ? '<button class="btn ghost" style="margin-top:.6rem" data-act="lessth">Скрыть темы</button>' : '') : '<button class="btn ghost" style="margin-top:.6rem" data-act="moreth">Ещё темы</button>') +
     '<label>Зимний вайб</label><div class="seg"><button class="'+(P().snow === true ? 'on' : '')+'" data-act="snow" data-v="1">❄ Снегопад</button><button class="'+(P().snow !== true ? 'on' : '')+'" data-act="snow" data-v="0">Без снега</button></div>' +
     '<label>Размер интерфейса</label><div class="seg">' + Object.keys(SCALES).map(function(k){ return '<button class="'+((P().scale || 'm') === k ? 'on' : '')+'" data-act="scale" data-v="'+k+'">'+SCALES[k].n+'</button>'; }).join('') + '</div></div>';
 }
@@ -1798,6 +1798,7 @@ var ACT = {
   stats: function(){ api('GET', '/api/admin/stats').then(statsSheet).catch(function(){ toast('Не удалось загрузить статистику'); }); },
   theme: function(d){ P().theme = d.v; markDirty('me'); haptic(); render(); },
   moreth: function(){ MORE_TH = true; render(); },
+  lessth: function(){ MORE_TH = false; render(); },
   snow: function(d){ P().snow = d.v === '1'; markDirty('me'); haptic(); render(); },
   scale: function(d){ P().scale = d.v; markDirty('me'); haptic(); render(); },
   scope: function(d){ setScope(d.v); },
