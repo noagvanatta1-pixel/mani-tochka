@@ -578,12 +578,16 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 @keyframes gshine{0%{left:-40%}60%,100%{left:110%}}
 @media (prefers-reduced-motion:reduce){.gc .gbar i::after{animation:none}}
 .gc .gleft{color:var(--muted);font-weight:600;font-size:.9375rem;margin-bottom:.75rem}
-.gc.done .gleft{display:none}
+.gc.done .gleft span{display:none}
 #app .card.gc.done .btn.gbtn:not(.ghost):not(.danger){background:linear-gradient(135deg,#f0b429,#d98e04);color:#2a1d00}
 .gc.done .gbar i{background:linear-gradient(90deg,#f0b429,#ffe27a)}
 .gc.done .gnum b{color:#ffe27a}
 .gc .gplan,.gc .gfore{margin-left:1rem;margin-right:1rem}
 #app .card.gc .btn.gbtn:not(.ghost):not(.danger){width:calc(100% - 2rem);background:linear-gradient(135deg,hsl(var(--gh),80%,52%),hsl(calc(var(--gh) + 35),85%,45%));box-shadow:0 .5rem 1.25rem hsla(var(--gh),90%,50%,.4);color:#fff}
+
+.gc .gleft{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.gc .gedit{display:inline-flex;align-items:center;gap:.375rem;padding:.4375rem .875rem;border-radius:1rem;background:hsla(var(--gh),90%,60%,.16);color:hsl(var(--gh),95%,78%);font-weight:700;font-size:.875rem;border:.0625rem solid hsla(var(--gh),90%,60%,.4)}
+.gc .ib.cam{bottom:auto;top:3.875rem}
 </style>
 </head>
 <body>
@@ -1085,7 +1089,7 @@ function goalCard(g, manage){
     '<div class="gover"><div class="gname" data-act="editgoal" data-id="'+g.id+'">'+esc(g.name)+'</div><span class="gring" style="--p:'+Math.min(100, p)+'"><b>'+p+'%</b></span></div></div>' +
     '<div class="gnum"><b>'+fmt(s)+'</b><span>из '+fmt(g.target)+'</span></div>' +
     '<div class="gbar"><i style="width:'+Math.min(100, p)+'%"></i><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u></div>' +
-    '<div class="gleft">'+(done ? 'Цель достигнута 🎉' : 'Осталось ' + fmt(left)) + '</div>' +
+    '<div class="gleft"><span>'+(done ? 'Цель достигнута 🎉' : 'Осталось ' + fmt(left)) + '</span>'+(manage ? '<button class="gedit" data-act="editgoal" data-id="'+g.id+'">'+ic('pencil',16)+' Сумма и срок</button>' : '')+'</div>' +
     planLine(g) + goalForecast(g) +
     '<button class="btn gbtn" data-act="contrib" data-id="'+g.id+'">'+ic('plus',22)+' Добавить</button></div>';
 }
