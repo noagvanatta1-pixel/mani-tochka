@@ -1049,8 +1049,14 @@ function calcPlan(rest, months, inc){
   return {per: per, free: inc - per, inc: inc, over: per > inc};
 }
 function plan(g){
-  if (!g.months) return null;
   var rest = g.target - saved(g);
+  if (g.cushion) {   // подушка: откладываем не больше 10% дохода в месяц
+    if (rest <= 0) return {done: true};
+    var ci = baseIncome(realKey()), cp = Math.min(rest, Math.ceil(ci * 0.1 / 100) * 100);
+    if (!(cp > 0)) return null;
+    var r0 = calcPlan(cp, 1, ci); r0.left = Math.ceil(rest / cp); r0.pct = true; return r0;
+  }
+  if (!g.months) return null;
   if (rest <= 0) return {done: true};
   var left = Math.max(1, g.months - monthsSince(g.start));
   var r = calcPlan(rest, left, baseIncome(realKey()));
@@ -1071,7 +1077,7 @@ function planLine(g){
   var p = plan(g);
   if (!p) return '<div class="gplan hint" data-act="editgoal" data-id="'+g.id+'">Укажите срок — подскажу, сколько откладывать в месяц</div>';
   if (p.done) return '<div class="gplan"><b>Цель достигнута 🎉</b></div>';
-  return '<div class="gplan '+(p.over ? 'neg' : '')+'" data-act="editgoal" data-id="'+g.id+'">Откладывать ≈ <b>'+fmt(p.per)+'</b>/мес · ещё '+p.left+' '+plural(p.left, ['месяц','месяца','месяцев']) +
+  return '<div class="gplan '+(p.over ? 'neg' : '')+'" data-act="editgoal" data-id="'+g.id+'">Откладывать ≈ <b>'+fmt(p.per)+'</b>/мес'+(p.pct ? ' (10% дохода)' : '')+' · ещё '+p.left+' '+plural(p.left, ['месяц','месяца','месяцев']) +
     '<small>'+(p.over ? 'Больше зарплаты ('+fmt(p.inc)+') — увеличьте срок' : 'На жизнь останется ≈ '+fmt(p.free)+'/мес при зарплате '+fmt(p.inc))+'</small></div>';
 }
 function goalsSummary(){
