@@ -509,6 +509,18 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .dempty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:.4rem;padding:1.6rem 1.2rem}
 .dempty .eico{width:3.6rem;height:3.6rem;border-radius:50%;display:grid;place-items:center;background:var(--pink-l);color:var(--pink-d);margin-bottom:.3rem}
 .dempty b{font-size:1.05rem;color:var(--ink)}.dempty p{margin:0;font-size:.875rem;color:var(--muted);font-weight:600}
+
+/* выбор личный / семейный */
+.scopecard{margin:0 0 .9rem}
+.scopecard .sch{font-size:.85rem;font-weight:700;color:var(--muted);margin:0 .4rem .5rem}
+.stiles{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+.stile{display:flex;flex-direction:column;align-items:flex-start;gap:.15rem;padding:.9rem 1rem;border-radius:1.25rem;background:var(--card);color:var(--ink);text-align:left;box-shadow:inset 0 0 0 1px var(--line);transition:.15s}
+.stile .si{width:2.6rem;height:2.6rem;border-radius:.9rem;display:flex;align-items:center;justify-content:center;background:var(--pink-l);color:var(--pink-d);margin-bottom:.4rem}
+.stile b{font-size:1.1rem;font-weight:800}
+.stile em{font-style:normal;font-size:.78rem;font-weight:600;color:var(--muted)}
+.stile.on{background:linear-gradient(135deg,var(--bal1),var(--bal2));color:#fff;box-shadow:0 .5rem 1.2rem rgba(var(--sh),.3)}
+.stile.on .si{background:rgba(255,255,255,.22);color:#fff}
+.stile.on em{color:rgba(255,255,255,.8)}
 </style>
 </head>
 <body>
@@ -1308,6 +1320,7 @@ function vProf(){
   var chip = st === 'premium' ? 'Премиум' : (st === 'trial' ? 'Пробный период' : 'Бесплатный тариф');
   return '<div class="top"><div><div class="title">Профиль</div></div></div>' +
     '<div class="card prof" data-act="avedit" style="cursor:pointer"><div class="ava" style="'+avaStyle()+'">'+esc(nm.charAt(0).toUpperCase())+'</div><div><b>'+esc(nm)+'</b><span class="pchip '+(st === 'premium' ? 'gold' : '')+'">'+(st === 'premium' ? '★ ' : '')+chip+'</span>'+(premMerged() ? '<div class="psub">'+premText()+'</div>' : '')+'</div></div>' +
+    scopeCard() +
     '<div class="plan slim setlink" data-act="opensettings">'+ic('gear',20)+'<b>Настройки</b><span>›</span></div>' +
     ((PLAN ? PLAN.owner : ownCached()) ? '<div class="plan slim setlink" data-act="stats">'+ic('chart',20)+'<b>Статистика</b><span>›</span></div>' : '') +
     planCard() + (scope === 'me' ? workListCard() : '') + recurCard() + familyCard() + refCard() + accountCard() + supportCard() +
@@ -2288,6 +2301,12 @@ function trialBar(){
   if (!ONLINE || !PLAN || !PLAN.paywall || PLAN.status !== 'trial' || PLAN.daysLeft > 3) return '';
   return '<div class="trialbar" data-tab="prof">Пробный период: осталось ' + PLAN.daysLeft + ' ' + plural(PLAN.daysLeft, ['день', 'дня', 'дней']) + ' · <b>Подробнее</b></div>';
 }
+function scopeCard(){
+  if (!ONLINE) return '';
+  var fam = FAM && FAM.family;
+  function t(v, ico, name, sub){ return '<button class="stile ' + (scope === v ? 'on' : '') + '" data-act="scope" data-v="' + v + '"><span class="si">' + ic(ico, 24) + '</span><b>' + name + '</b><em>' + sub + '</em></button>'; }
+  return '<div class="scopecard"><div class="sch">Какой бюджет показывать</div><div class="stiles">' + t('me', 'user', 'Личный', 'Только ваши записи') + t('fam', 'heart', 'Семейный', fam ? 'Общий с партнёром' : 'Создать или вступить') + '</div></div>';
+}
 function scopeBar(){
   return '<div class="seg scope"><button class="'+(scope === 'me' ? 'on' : '')+'" data-act="scope" data-v="me">Личный</button>' +
     '<button class="'+(scope === 'fam' ? 'on' : '')+'" data-act="scope" data-v="fam">'+(FAM && FAM.family ? 'Семья' : 'Семья ＋')+'</button></div>';
@@ -2310,10 +2329,10 @@ function setScope(to){
   if (to === scope) return;
   if (to === 'fam') {
     if (!FAM || !FAM.family) { openFamily(); return; }
-    var go = function(){ slots[scope].s = S; scope = 'fam'; S = slots.fam.s; applyRecurring(); if (TAB === 'prof') TAB = 'home'; window.scrollTo(0, 0); render(); haptic('light'); };
+    var go = function(){ slots[scope].s = S; scope = 'fam'; S = slots.fam.s; applyRecurring(); if (TAB === 'prof') TAB = 'home'; window.scrollTo(0, 0); render(); haptic('light'); toast('Вы перешли в семейный бюджет'); };
     if (slots.fam.s) go(); else loadFam().then(go).catch(function(){ toast('Не удалось загрузить семью'); });
   } else {
-    slots[scope].s = S; scope = 'me'; S = slots.me.s; if (TAB === 'prof') TAB = 'home'; window.scrollTo(0, 0); render(); haptic('light');
+    slots[scope].s = S; scope = 'me'; S = slots.me.s; if (TAB === 'prof') TAB = 'home'; window.scrollTo(0, 0); render(); haptic('light'); toast('Вы перешли в личный бюджет');
   }
 }
 function openFamily(){
@@ -2338,8 +2357,7 @@ function openFamily(){
 function familyCard(){
   if (!ONLINE) return '';
   var f = FAM && FAM.family;
-  return '<div class="card set"><label style="margin-top:0">Какой бюджет показывать</label>' + scopeBar() +
-    '<label>Семейный бюджет</label>' +
+  return '<div class="card set"><label style="margin-top:0">Семейный бюджет</label>' +
     '<div class="hi" style="margin:0 0.25rem .7rem;font-weight:600">' + (f ? 'В семье: ' + f.members.map(function(m){ return esc(m.name || 'Участник'); }).join(' и ') : 'Ведите общий бюджет с партнёром') + '</div>' +
     '<button class="btn ghost" data-act="openfam">' + (f ? 'Управлять семьёй' : 'Создать семью или вступить') + '</button></div>';
 }
