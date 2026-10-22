@@ -539,6 +539,19 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .curtain.cout{animation:curOut .26s cubic-bezier(.4,0,.8,.4) both}
 .plan.slim.acc span{transition:transform .2s}.plan.slim.acc.open span{transform:rotate(90deg)}
 .plan.slim[data-act=themetoggle]>:first-child{background:#9b59d6!important}
+
+/* карточка кредита */
+.debt.loan{padding:1rem 1rem 1rem;border-radius:1.4rem;position:relative;overflow:hidden;background:linear-gradient(160deg,hsla(var(--dh),70%,55%,.16),transparent 55%),var(--card)}
+.debt.loan:before{content:"";position:absolute;left:0;top:0;bottom:0;width:.28rem;background:linear-gradient(180deg,hsl(var(--dh),70%,58%),hsl(calc(var(--dh) + 40),70%,45%))}
+.debt.loan .dh{margin-bottom:.7rem}
+.debt.loan .lico{width:2.9rem;height:2.9rem;border-radius:.95rem;display:flex;align-items:center;justify-content:center;color:#fff;flex:none;background:linear-gradient(135deg,hsl(var(--dh),65%,55%),hsl(calc(var(--dh) + 40),65%,42%))}
+.debt.loan .dh .b b{font-size:1.1rem;font-weight:800}
+.debt.loan .lamt{text-align:right}.debt.loan .lamt b{display:block;font-size:1.2rem;font-weight:800}.debt.loan .lamt span{font-size:.75rem;color:var(--muted);font-weight:600}
+.lbar{display:flex;align-items:center;gap:.6rem;margin:0 0 .75rem}.lbar .bar{flex:1;margin:0}.lbar em{font-style:normal;font-size:.78rem;font-weight:800;color:var(--muted);min-width:2.2rem;text-align:right}
+.lchips{display:grid;grid-template-columns:1fr 1fr;gap:.45rem;margin-bottom:.3rem}
+.lchips>div{background:rgba(127,127,160,.12);border-radius:.9rem;padding:.5rem .7rem}
+.lchips span{display:block;font-size:.7rem;font-weight:600;color:var(--muted)}.lchips b{font-size:.9rem;font-weight:800}
+.dwarn{margin:.3rem 0;font-size:.82rem;font-weight:700;color:var(--red)}
 </style>
 </head>
 <body>
@@ -1122,15 +1135,21 @@ function nextPayText(d){
   return pad(dd) + '.' + pad(m + 1);
 }
 function debtCard(d){
-  var left = debtLeft(d), paid = d.total - left, po = payoffInfo(d), np = nextPayText(d);
-  var meta = [];
-  meta.push('Выплачено ' + fmt(paid) + ' из ' + fmt(d.total));
-  if (d.pay > 0 && !po.done) meta.push('Платёж ' + fmt(d.pay) + ', каждого ' + (d.day || 1) + '-го' + (np ? ' · ближайший ' + np : ''));
-  var fc = po.done ? '<span class="ok">Погашено</span>' : (po.never ? '<span class="ok neg">Платёж не покрывает проценты</span>' : (po.months ? '<span>Закроется ≈ ' + po.date + ' (' + po.months + ' ' + plural(po.months, ['месяц', 'месяца', 'месяцев']) + ')</span>' : ''));
-  return '<div class="card debt"><div class="dh" data-act="editdebt" data-id="' + d.id + '"><div class="em"><span class="ci">' + ic(d.kind === 'loan' ? 'card' : 'wallet', 22) + '</span></div><div class="b"><b>' + esc(d.name) + '</b><span>' + DKINDS[d.kind] + '</span></div><div class="amt">' + fmt(left) + '</div></div>' +
-    '<div class="bar"><i style="width:' + pct(paid, d.total) + '%"></i></div>' +
-    '<div class="dmeta">' + meta.join('<br>') + '</div>' + (fc ? '<div class="dmeta">' + fc + '</div>' : '') +
-    (po.done ? '' : '<button class="btn ghost" data-act="debtpay" data-id="' + d.id + '">' + (d.kind === 'owed' ? 'Принять возврат' : 'Внести платёж') + '</button>') + '</div>';
+  var left = debtLeft(d), paid = d.total - left, po = payoffInfo(d), np = nextPayText(d), done = left <= 0;
+  var h = pHue(d.name), pc = Math.round(pct(paid, d.total));
+  var chips = [];
+  if (!done && d.pay > 0) chips.push(['Платёж', fmt(d.pay) + ' · ' + (d.day || 1) + '-го']);
+  if (!done && np) chips.push(['Ближайший', np]);
+  if (!done && d.rate > 0) chips.push(['Ставка', d.rate + '%']);
+  if (!done && po.months) chips.push(['Закроется', po.date]);
+  var warn = (!done && po.never) ? '<div class="dwarn">Платёж не покрывает проценты</div>' : '';
+  return '<div class="card debt loan" style="--dh:' + h + '"><div class="dh" data-act="editdebt" data-id="' + d.id + '">' +
+    '<div class="lico">' + ic('card', 22) + '</div>' +
+    '<div class="b"><b>' + esc(d.name) + '</b><span>' + (done ? 'Погашен' : (d.kind === 'loan' ? 'Кредит' : DKINDS[d.kind])) + '</span></div>' +
+    '<div class="lamt"><b>' + fmt(done ? d.total : left) + '</b><span>' + (done ? 'выплачено' : 'из ' + fmt(d.total)) + '</span></div></div>' +
+    '<div class="lbar"><div class="bar"><i style="width:' + pc + '%"></i></div><em>' + pc + '%</em></div>' +
+    (chips.length ? '<div class="lchips">' + chips.map(function(c){ return '<div><span>' + c[0] + '</span><b>' + c[1] + '</b></div>'; }).join('') + '</div>' : '') + warn +
+    (done ? '' : '<button class="btn ghost" data-act="debtpay" data-id="' + d.id + '">Внести платёж</button>') + '</div>';
 }
 var DTAB = '', DLAST = 'loan', dLend = true;
 function dShort(ds){ return ds ? ds.slice(8,10) + '.' + ds.slice(5,7) : ''; }
