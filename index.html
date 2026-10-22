@@ -497,7 +497,8 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .qrow button:active .qi{transform:scale(.94)}
 
 /* долги */
-.dsub{margin-top:.5rem}.dsub button{font-size:.85rem}
+.dtop{margin:0 0 .7rem}.stile.ok.on{background:linear-gradient(135deg,#0f9d73,#0a6e52)}
+.dsub{margin:0 0 .8rem}.dsub button{font-size:.85rem}
 .dseg button{white-space:nowrap;font-size:.9rem;padding-left:.3rem;padding-right:.3rem}
 .dseg button i{font-style:normal;font-size:.7rem;font-weight:800;margin-left:.25rem;padding:.05rem .4rem;border-radius:1rem;background:rgba(127,127,160,.25)}
 .debt .pav{width:2.9rem;height:2.9rem;border-radius:50%;display:grid;place-items:center;color:#fff;font:800 1.2rem var(--fd,inherit);flex:none}
@@ -1141,8 +1142,8 @@ function vDebt(){
   var names = {loan: 'Кредиты', owe: 'Я должен', owed: 'Мне должны', done: 'Закрытые'};
   if (DTAB !== 'done') DLAST = DTAB;
   var nAct = by.loan.length + by.owed.length;
-  h += '<div class="seg dseg"><button class="' + (DTAB !== 'done' ? 'on' : '') + '" data-act="dtab" data-v="' + DLAST + '">Активные' + (nAct ? ' <i>' + nAct + '</i>' : '') + '</button>' +
-    '<button class="' + (DTAB === 'done' ? 'on' : '') + '" data-act="dtab" data-v="done">Закрытые' + (by.done.length ? ' <i>' + by.done.length + '</i>' : '') + '</button></div>';
+  function dt(v, on, ico, name, n, cls){ return '<button class="stile ' + cls + ' ' + (on ? 'on' : '') + '" data-act="dtab" data-v="' + v + '"><span class="si">' + ic(ico, 24) + '</span><b>' + name + '</b><em>' + n + ' ' + plural(n, ['долг', 'долга', 'долгов']) + '</em></button>'; }
+  h += '<div class="stiles dtop">' + dt(DLAST, DTAB !== 'done', 'clock', 'Активные', nAct, '') + dt('done', DTAB === 'done', 'shield', 'Закрытые', by.done.length, 'ok') + '</div>';
   if (DTAB !== 'done') h += '<div class="seg dseg dsub">' + ['loan', 'owed'].map(function(k){
     return '<button class="' + (k === DTAB ? 'on' : '') + '" data-act="dtab" data-v="' + k + '">' + names[k] + (by[k].length ? ' <i>' + by[k].length + '</i>' : '') + '</button>'; }).join('') + '</div>';
   var cur = by[DTAB], tot = sum(cur.map(debtLeft)), act = cur.filter(function(d){ return debtLeft(d) > 0; });
