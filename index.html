@@ -1322,8 +1322,7 @@ function accountCard(){
   if (!ONLINE) return '<div class="card set"><label style="margin-top:0">Режим без аккаунта</label><div class="hi" style="margin:0 0.25rem">Данные хранятся только на этом устройстве. Войдите, чтобы они сохранялись на сервере и не пропадали.</div>' + (IN_TG ? '' : '<button class="btn big" style="margin-top:.8rem" data-act="weblogin">Войти или создать аккаунт</button>') + '</div>';
   var st = syncState === 'ok' ? '☁️ Данные сохраняются на сервере' : (syncState === 'offline' ? '⚠️ Нет связи с сервером — сохраню, как только появится' : 'Подключаюсь…');
   return '<div class="card set"><label style="margin-top:0">Аккаунт</label><div class="hi" style="margin:0 0.25rem 0.875rem"><b style="color:var(--ink)">'+esc(tgUser.first_name || 'Вы')+'</b><br>'+st+'</div>' +
-    (BOT ? '<button class="btn ghost" data-act="invite">'+ic('plus',22)+' Позвать друзей</button>' : '') +
-    (WS ? '<button class="btn ghost" style="margin-top:0.625rem" data-act="weblogout">'+ic('logout',22)+' Выйти из аккаунта</button>' : '') + '</div>';
+    (WS ? '<button class="btn ghost" style="margin-top:0" data-act="weblogout">'+ic('logout',22)+' Выйти из аккаунта</button>' : '') + '</div>';
 }
 function ownCached(){ try { return localStorage.getItem('kp_own') === '1'; } catch (e) { return false; } }
 var AVC = [['#6366f1','#8b8ff8'],['#12a574','#22c88a'],['#e8913a','#f2b04e'],['#e5466a','#f06b8a'],['#2f7fe8','#55a6f5'],['#1d2547','#323e6e']];
@@ -2022,10 +2021,12 @@ var ACT = {
     S.recurring.push({id: uid(), name: name, amount: a, catId: recCat, day: day, from: mk(n.getFullYear(), n.getMonth())});
     applyRecurring(); save(); closeSheet(); render(); toast('Платёж добавлен');
   },
+  refopen: function(){ REFOPEN = true; render(); },
+  refclose: function(){ REFOPEN = false; render(); },
   recopen: function(){ openRecList(); },
   delrec: function(d){
     var r = S.recurring.filter(function(x){ return x.id === d.id; })[0]; if (!r) return;
-    confirmBox('Удалить регулярный платёж «' + r.name + '»? Уже добавленные операции останутся.', function(){ S.recurring = S.recurring.filter(function(x){ return x.id !== d.id; }); save(); render(); if ($('#sheet .panel')) openRecList(); });
+    confirmBox('Удалить регулярный платёж «' + r.name + '»? Уже добавленные операции останутся.', function(){ S.recurring = S.recurring.filter(function(x){ return x.id !== d.id; }); save(); render(); if ($('#sheet.on')) openRecList(); });
   },
   export: function(){
     if (gate('Экспорт операций')) return;
@@ -2129,7 +2130,7 @@ document.addEventListener('touchstart', function(e){
   sw = {x: e.touches[0].clientX, y: e.touches[0].clientY};
 }, {passive: true});
 document.addEventListener('touchend', function(e){
-  if (!sw || !e.changedTouches.length || GATE || $('#sheet .panel')) { sw = null; return; }
+  if (!sw || !e.changedTouches.length || GATE || $('#sheet.on')) { sw = null; return; }
   var dx = e.changedTouches[0].clientX - sw.x, dy = e.changedTouches[0].clientY - sw.y; sw = null;
   if (Math.abs(dx) < 80 || Math.abs(dx) < Math.abs(dy) * 2) return;
   var nt = null;
@@ -2376,16 +2377,18 @@ function familyCard(){
     '<div class="hi" style="margin:0 0.25rem .7rem;font-weight:600">' + (f ? 'В семье: ' + f.members.map(function(m){ return esc(m.name || 'Участник'); }).join(' и ') : 'Ведите общий бюджет с партнёром') + '</div>' +
     '<button class="btn ghost" data-act="openfam">' + (f ? 'Управлять семьёй' : 'Создать семью или вступить') + '</button></div>';
 }
+var REFOPEN = false;
 function refCard(){
   if (!ONLINE || !REF) return '';
   var tiers = 'за 1 друга −10%, за 3 −20%, за 5 −50%';
+  if (!REFOPEN) return '<div class="plan slim setlink" data-act="refopen">' + ic('gift', 20) + '<b>Реферальная система</b><span>›</span></div>';
   return '<div class="card set"><label style="margin-top:0">Скидка за друзей</label>' +
     '<div class="hi" style="margin:0 .25rem .5rem;font-weight:600">' + tiers + '. Скидка считается, когда друг оформил подписку.</div>' +
     '<div class="fcode">' + esc(REF.code) + '</div>' +
     '<div class="hi" style="margin:0 .25rem .6rem;font-size:.9rem;text-align:center">Пришли друзей: ' + REF.invited + ' · оплатили: ' + REF.paying + ' · ваша скидка: <b style="color:var(--ink)">' + REF.discount + '%</b></div>' +
     (BOT ? '<button class="btn ghost" data-act="invite">'+ic('plus',22)+' Позвать друзей</button>' : '') +
     (REF.referred ? '' : '<label>Вас пригласил друг? Введите его код</label><div class="row2"><input class="f" id="ref-code" placeholder="Код друга" maxlength="12" autocapitalize="characters" style="flex:1;margin:0"><button class="chip" data-act="refuse">Применить</button></div>') +
-    '</div>';
+    '<button class="btn ghost" style="margin-top:.7rem" data-act="refclose">Скрыть</button></div>';
 }
 function remindCard(){
   if (!ONLINE) return '';
