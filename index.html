@@ -531,10 +531,12 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .ht em{flex-basis:100%;font-style:normal;font-size:.75rem;font-weight:600;color:var(--muted);margin-top:.35rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .legal{display:flex;justify-content:center;gap:1.2rem;flex-wrap:wrap;margin:.7rem 0 .2rem}.legal a{font-size:.78rem;font-weight:600;color:var(--muted);text-decoration:underline;text-underline-offset:.15rem;cursor:pointer}
 
-@keyframes slL{from{transform:translateX(-42%);opacity:.2}to{transform:none;opacity:1}}
-@keyframes slR{from{transform:translateX(42%);opacity:.2}to{transform:none;opacity:1}}
-#app.sl{animation:slL .32s cubic-bezier(.2,.8,.2,1)}
-#app.sr{animation:slR .32s cubic-bezier(.2,.8,.2,1)}
+
+.curtain{position:fixed;left:0;right:0;top:0;bottom:calc(var(--nav) + env(safe-area-inset-bottom));overflow:hidden;pointer-events:none}
+@keyframes curIn{from{transform:translateX(-100%)}to{transform:none}}
+@keyframes curOut{from{transform:none}to{transform:translateX(-100%)}}
+.curtain.cin{animation:curIn .3s cubic-bezier(.22,.8,.25,1) both}
+.curtain.cout{animation:curOut .26s cubic-bezier(.4,0,.8,.4) both}
 </style>
 </head>
 <body>
@@ -2066,7 +2068,7 @@ var ACT = {
 document.addEventListener('click', function(e){
   var t = e.target.closest('[data-tab],[data-act],[data-close]'); if (!t) return;
   if (t.hasAttribute('data-close')) { backToPlan = backToCats = backToOp = false; opDraft = null; closeSheet(); return; }
-  if (t.dataset.tab) { var was = TAB === 'prof' || TAB === 'set'; TAB = t.dataset.tab; window.scrollTo(0, 0); haptic('light'); render(); var now = TAB === 'prof' || TAB === 'set'; if (was !== now) slideApp(now ? 'l' : 'r'); return; }
+  if (t.dataset.tab) { var was = TAB === 'prof' || TAB === 'set', gh = ghostSnap(); TAB = t.dataset.tab; window.scrollTo(0, 0); haptic('light'); render(); var now = TAB === 'prof' || TAB === 'set'; if (was !== now) curtainRun(gh, now); return; }
   if (GATE && !OPEN_OK[t.dataset.act]) { loginStart(); return; }   // без входа любое действие просит войти
   if (ACT[t.dataset.act]) ACT[t.dataset.act](t.dataset, t);
 });
@@ -2128,41 +2130,43 @@ function endDrag(){
 document.addEventListener('touchend', endDrag);
 document.addEventListener('touchcancel', endDrag);
 
-/* свайп вправо открывает профиль, влево возвращает на главную: экран тянется за пальцем, новый выезжает сбоку */
-var sw = null;
-function slideApp(dir){
-  var a = $('#app'); if (!a || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
-  a.classList.remove('sl', 'sr'); a.style.transform = ''; a.style.opacity = ''; a.style.transition = '';
-  void a.offsetWidth; a.classList.add(dir === 'l' ? 'sl' : 'sr');
-  setTimeout(function(){ a.classList.remove('sl', 'sr'); }, 340);
+/* профиль как шторка: свайп вправо накладывает её слева, свайп влево убирает */
+var sw = null, CURT = null;
+function ghostSnap(){
+  var app = $('#app'); if (!app) return null;
+  var cs = getComputedStyle(document.body), g = document.createElement('div'), inner = document.createElement('div');
+  g.className = 'curtain'; g.style.background = cs.backgroundColor; g.style.backgroundImage = cs.backgroundImage;
+  inner.style.cssText = 'padding:1rem;transform:translateY(' + (-window.scrollY) + 'px)';
+  inner.innerHTML = app.innerHTML.replace(/ id="[^"]*"/g, '');
+  g.appendChild(inner); return g;
+}
+function curtainRun(oldG, opening){
+  var app = $('#app');
+  if (!oldG || !app || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  if (CURT) { CURT(); }
+  var newG = ghostSnap(); if (!newG) return;
+  var top = opening ? newG : oldG, under = opening ? oldG : newG;
+  under.style.zIndex = 10; top.style.zIndex = 11;
+  top.classList.add(opening ? 'cin' : 'cout'); top.style.boxShadow = '0 0 2rem rgba(0,0,0,.55)';
+  document.body.appendChild(under); document.body.appendChild(top);
+  app.style.visibility = 'hidden';
+  var done = false;
+  function fin(){ if (done) return; done = true; clearTimeout(tm); CURT = null; if (under.parentNode) under.remove(); if (top.parentNode) top.remove(); app.style.visibility = ''; }
+  var tm = setTimeout(fin, 360); CURT = fin;
 }
 function swipeDir(dx){ return dx > 0 ? (TAB !== 'prof' && TAB !== 'set' ? 'prof' : null) : ((TAB === 'prof' || TAB === 'set') ? 'home' : null); }
-function swipeReset(animate){
-  var a = $('#app'); if (!a) return;
-  a.style.transition = animate ? 'transform .22s ease, opacity .22s ease' : 'none'; a.style.transform = ''; a.style.opacity = '';
-}
 document.addEventListener('touchstart', function(e){
   var t = e.target;
   if (e.touches.length !== 1 || (t.closest && t.closest('#sheet,input,textarea,.chips,.seg,canvas'))) { sw = null; return; }
-  sw = {x: e.touches[0].clientX, y: e.touches[0].clientY, on: false};
-}, {passive: true});
-document.addEventListener('touchmove', function(e){
-  if (!sw || !e.touches.length || GATE || $('#sheet.on')) return;
-  var dx = e.touches[0].clientX - sw.x, dy = e.touches[0].clientY - sw.y;
-  if (!sw.on) { if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.6 && swipeDir(dx)) sw.on = true; else return; }
-  if (!swipeDir(dx)) { swipeReset(true); return; }
-  var a = $('#app'); if (!a) return;
-  var k = Math.max(-1, Math.min(1, dx / (window.innerWidth * 0.8)));
-  a.style.transition = 'none'; a.style.transform = 'translateX(' + Math.round(k * window.innerWidth * 0.35) + 'px)'; a.style.opacity = String(1 - Math.abs(k) * 0.4);
+  sw = {x: e.touches[0].clientX, y: e.touches[0].clientY};
 }, {passive: true});
 document.addEventListener('touchend', function(e){
-  if (!sw || !e.changedTouches.length || GATE || $('#sheet.on')) { sw = null; swipeReset(true); return; }
-  var dx = e.changedTouches[0].clientX - sw.x, dy = e.changedTouches[0].clientY - sw.y, was = sw.on; sw = null;
+  if (!sw || !e.changedTouches.length || GATE || $('#sheet.on')) { sw = null; return; }
+  var dx = e.changedTouches[0].clientX - sw.x, dy = e.changedTouches[0].clientY - sw.y; sw = null;
   var nt = (Math.abs(dx) >= 80 && Math.abs(dx) >= Math.abs(dy) * 2) ? swipeDir(dx) : null;
-  if (!nt) { if (was) swipeReset(true); return; }
-  TAB = nt; window.scrollTo(0, 0); haptic('light'); render(); slideApp(nt === 'prof' ? 'l' : 'r');
+  if (!nt) return;
+  var gh = ghostSnap(); TAB = nt; window.scrollTo(0, 0); haptic('light'); render(); curtainRun(gh, nt === 'prof');
 }, {passive: true});
-document.addEventListener('touchcancel', function(){ if (sw && sw.on) swipeReset(true); sw = null; }, {passive: true});
 
 
 $('#file').addEventListener('change', function(e){
