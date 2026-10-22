@@ -78,6 +78,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS referrals (
     user_id INTEGER PRIMARY KEY, referrer_id INTEGER NOT NULL, created_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS chan_subs (
+    user_id INTEGER PRIMARY KEY, ok INTEGER NOT NULL, at INTEGER NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS payments (
     charge_id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, plan TEXT NOT NULL, stars INTEGER NOT NULL, created_at INTEGER NOT NULL
   );
@@ -139,6 +142,8 @@ const q = {
   ykPending: db.prepare('SELECT id FROM yk_pay WHERE status = \'pending\' AND created_at > ?'),
   ykExpire: db.prepare('UPDATE yk_pay SET status = \'expired\' WHERE status = \'pending\' AND created_at <= ?'),
   insPayment: db.prepare('INSERT OR IGNORE INTO payments (charge_id, user_id, plan, stars, created_at) VALUES (?, ?, ?, ?, ?)'),
+  chanGet: db.prepare('SELECT ok FROM chan_subs WHERE user_id = ?'),
+  chanPut: db.prepare('INSERT INTO chan_subs (user_id, ok, at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET ok = excluded.ok, at = excluded.at'),
   userCreated: db.prepare('SELECT created_at FROM users WHERE id = ?'),
   putPremium: db.prepare(`INSERT INTO premium (user_id, until) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET until = excluded.until`),
   famPremium: db.prepare(`SELECT MAX(p.until) AS until FROM premium p JOIN members m ON m.user_id = p.user_id WHERE m.family_id = ?`),
@@ -176,6 +181,8 @@ const PAYWALL = process.env.PAYWALL === '1';
 const TRIAL_DAYS = Number(process.env.TRIAL_DAYS) || 14;
 const PRICE_MONTH = Number(process.env.PRICE_MONTH) || 99;
 const PRICE_YEAR = Number(process.env.PRICE_YEAR) || 790;
+const CHANNEL = String(process.env.CHANNEL || '').replace(/^https?:\/\/t\.me\//i, '').replace(/^@/, '').replace(/[^\w]/g, '');   // публичный Telegram-канал: подписчикам скидка
+const CHANNEL_DISC = Number(process.env.CHANNEL_DISC) || 20;
 const PRICE_LIFE = Number(process.env.PRICE_LIFE) || 1990;     // разовая оплата, подписка навсегда
 const OWNER_ID = Number(process.env.OWNER_ID) || 8675855634;      // только он видит статистику
 const LIFETIME_UNTIL = 4102444800000;                           // 01.01.2100
@@ -479,13 +486,15 @@ function planInfo(uid) {
   let status = 'trial', until = trialEnd;
   if (pr && pr.until > now) { status = 'premium'; until = pr.until; }
   else if (PAYWALL && trialEnd <= now) status = 'free';
-  const disc = discountFor(q.refPaying.get(uid, now).n);
+  const refDisc = discountFor(q.refPaying.get(uid, now).n);
+  const chanDisc = chanOk(uid) ? CHANNEL_DISC : 0;   // скидка за подписку на канал не складывается со скидкой за друзей: берётся большая
+  const disc = Math.max(refDisc, chanDisc);
   const k = (100 - disc) / 100;
   return {
     status, until, daysLeft: Math.max(0, Math.ceil((until - now) / DAY)),
     locked: status === 'free', paywall: PAYWALL, lastPaid: (q.lastPay.get(uid) || {}).t || 0,
     priceMonth: Math.round(PRICE_MONTH * k), priceYear: Math.round(PRICE_YEAR * k), priceLife: Math.round(PRICE_LIFE * k),
-    fullMonth: PRICE_MONTH, fullYear: PRICE_YEAR, fullLife: PRICE_LIFE, discount: disc,
+    fullMonth: PRICE_MONTH, fullYear: PRICE_YEAR, fullLife: PRICE_LIFE, discount: disc, refDisc, chanDisc, chanPct: CHANNEL_DISC, channel: (CHANNEL && uid < EMAIL_UID_BASE) ? CHANNEL : '',
     pay: PAY_URL ? PAY_URL.replace('{uid}', String(uid)) : '', support: SUPPORT_TG,
     owner: uid === OWNER_ID,
     /* аккаунт по почте (без Telegram): только оплата на странице ЮKassa, без счетов в Telegram */
@@ -674,6 +683,7 @@ async function handleApi(req, res, url) {
     if (!plan) throw httpError(400, 'bad plan');
     if (!BOT_TOKEN || !BOT_NAME) throw httpError(503, 'payments unavailable');
     touch(user);
+    await checkChannel(user.id);
     const pm = planMeta(plan, planInfo(user.id));
     const r = await tgApi('createInvoiceLink', {
       title: pm.title, description: pm.description, payload: plan + '|' + user.id,
@@ -689,6 +699,7 @@ async function handleApi(req, res, url) {
     if (!plan) throw httpError(400, 'bad plan');
     if (!BOT_TOKEN || !BOT_NAME || !YK_TOKEN) throw httpError(503, 'card payments unavailable');
     touch(user);
+    await checkChannel(user.id);
     const pm = planMeta(plan, planInfo(user.id));
     const r = await tgApi('createInvoiceLink', {
       title: pm.title, description: pm.description, payload: plan + '|' + user.id,
@@ -704,6 +715,7 @@ async function handleApi(req, res, url) {
     if (!plan) throw httpError(400, 'bad plan');
     if (!YK_ON) throw httpError(503, 'sbp unavailable');
     touch(user);
+    await checkChannel(user.id);
     const pm = planMeta(plan, planInfo(user.id));
     const r = await ykApi('POST', '/payments', {
       amount: { value: pm.rub + '.00', currency: 'RUB' }, capture: true,
@@ -726,6 +738,7 @@ async function handleApi(req, res, url) {
   }
 
   if (p === '/api/admin/stats' && m === 'GET') { if (user.id !== OWNER_ID) throw httpError(403, 'forbidden'); return json(res, 200, ownerStats()); }
+  if (p === '/api/channel/check' && m === 'POST') { touch(user); await checkChannel(user.id); return json(res, 200, planInfo(user.id)); }
   if (p === '/api/plan' && m === 'GET') { touch(user); return json(res, 200, planInfo(user.id)); }
 
   if (p === '/api/state' && m === 'GET') {
@@ -892,6 +905,35 @@ async function tgApi(method, payload, timeoutMs) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let stopping = false;
 
+/* Скидка за подписку на канал. Подписку проверяет бот через getChatMember: он должен быть администратором канала. */
+function chanOk(uid) {
+  if (!CHANNEL || uid >= EMAIL_UID_BASE) return false;
+  const r = q.chanGet.get(uid);
+  return !!(r && r.ok);
+}
+async function checkChannel(uid) {
+  if (!CHANNEL || !BOT_TOKEN || uid >= EMAIL_UID_BASE) return false;
+  try {
+    const r = await tgApi('getChatMember', { chat_id: '@' + CHANNEL, user_id: uid }, 8000);
+    if (r && r.ok && r.result) {
+      const st = r.result.status;
+      const ok = st === 'creator' || st === 'administrator' || st === 'member' || (st === 'restricted' && r.result.is_member !== false);
+      q.chanPut.run(uid, ok ? 1 : 0, Date.now());
+      return ok;
+    }
+    console.error('Канал: Telegram не отдал статус подписки:', r && r.description);
+  } catch (e) { console.error('Канал: не удалось проверить подписку:', e.message); }
+  return chanOk(uid);   // Telegram не ответил: оставляем прежний результат
+}
+function chanPromo(uid) {
+  if (!CHANNEL) return { text: '', kb: [] };
+  if (chanOk(uid)) return { text: `✅ Скидка ${CHANNEL_DISC}% за подписку на канал активна.`, kb: [] };
+  return {
+    text: `📣 Подпишитесь на канал Копилки: подписчикам скидка ${CHANNEL_DISC}% на подписку.`,
+    kb: [[{ text: '📣 Подписаться на канал', url: 'https://t.me/' + CHANNEL }, { text: 'Проверить подписку', callback_data: 'chan' }]],
+  };
+}
+
 /* Быстрый ввод: «кофе 250», «такси 300», «+5000 зарплата» */
 const KEYWORDS = [
   [/кофе|обед|ужин|завтрак|пицц|продукт|магазин|супермаркет|еда|кафе|ресторан|доставк|перекус|вкусня/i, ['еда', 'продукт', 'кафе']],
@@ -1023,6 +1065,8 @@ function plansMessage(uid) {
     '',
     `Первые ${TRIAL_DAYS} дней бесплатно. Подписка включается сразу после оплаты.`,
   ];
+  const promo = chanPromo(uid);
+  if (promo.text) lines.push('', promo.text);
   const kb = [];
   if (card) {
     kb.push([{ text: `Месяц — ${info.priceMonth} ₽`, callback_data: 'b|month|card' }, { text: `Год — ${info.priceYear} ₽`, callback_data: 'b|year|card' }]);
@@ -1030,10 +1074,12 @@ function plansMessage(uid) {
   }
   kb.push([{ text: `⭐ Месяц — ${info.starsMonth}`, callback_data: 'b|month|stars' }, { text: `⭐ Год — ${info.starsYear}`, callback_data: 'b|year|stars' }]);
   kb.push([{ text: `⭐ Навсегда — ${info.starsLife}`, callback_data: 'b|life|stars' }]);
+  kb.push(...promo.kb);
   if (APP_URL) kb.push([{ text: 'Открыть Копилку', web_app: { url: APP_URL } }]);
   return { text: lines.join('\n'), reply_markup: { inline_keyboard: kb } };
 }
 async function sendPlanInvoice(chatId, uid, plan, method) {
+  await checkChannel(uid);
   const pm = planMeta(plan, planInfo(uid)), card = method === 'card' && !!YK_TOKEN;
   const body = { chat_id: chatId, title: pm.title, description: pm.description, payload: plan + '|' + uid };
   if (card) Object.assign(body, { provider_token: YK_TOKEN, currency: 'RUB', prices: [{ label: pm.label, amount: pm.rub * 100 }] });
@@ -1057,6 +1103,12 @@ async function handleCallback(cb) {
   if (parts[0] === 'rm' && cb.from) {
     try { q.remindOff.run(cb.from.id); } catch (_) {}
     await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Напоминания выключены. Включить можно в настройках приложения.', show_alert: true });
+    return;
+  }
+  if (parts[0] === 'chan' && cb.from) {
+    const ok = await checkChannel(cb.from.id);
+    await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: !CHANNEL ? 'Канал пока не подключён' : ok ? `Готово: скидка ${CHANNEL_DISC}% включена` : 'Подписку не нашёл. Подпишитесь на канал и нажмите ещё раз', show_alert: true });
+    if (ok && cb.message) await tgApi('sendMessage', { chat_id: cb.message.chat.id, ...plansMessage(cb.from.id) });
     return;
   }
   if (parts[0] === 'pl' && cb.message) {
@@ -1186,7 +1238,13 @@ async function handleUpdate(u) {
     : 'Нажмите кнопку ниже, чтобы открыть Копилку 👇\nИли напишите трату, например «кофе 250».';
   const kb = [[{ text: 'Открыть Копилку', web_app: { url: APP_URL } }]];
   if (PAYWALL && text.startsWith('/start')) kb.push([{ text: 'Подписка и цены', callback_data: 'pl' }]);
-  await tgApi('sendMessage', { chat_id: m.chat.id, text: msg, reply_markup: { inline_keyboard: kb } });
+  let full = msg;
+  if (text.startsWith('/start') && m.from) {
+    await checkChannel(m.from.id);   // кто уже подписан, сразу получит скидку
+    const promo = chanPromo(m.from.id);
+    if (promo.text) { full += '\n\n' + promo.text; kb.push(...promo.kb); }
+  }
+  await tgApi('sendMessage', { chat_id: m.chat.id, text: full, reply_markup: { inline_keyboard: kb } });
 }
 
 async function startBot() {
