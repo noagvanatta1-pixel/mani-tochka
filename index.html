@@ -1335,7 +1335,7 @@ function vProf(){
     scopeCard() +
     '<div class="plan slim setlink" data-act="opensettings">'+ic('gear',20)+'<b>Настройки</b><span>›</span></div>' +
     ((PLAN ? PLAN.owner : ownCached()) ? '<div class="plan slim setlink" data-act="stats">'+ic('chart',20)+'<b>Статистика</b><span>›</span></div>' : '') +
-    planCard() + (scope === 'me' ? workListCard() : '') + familyCard() + refCard() + accountCard() + supportCard() +
+    planCard() + (scope === 'me' ? workListCard() : '') + refCard() + accountCard() + supportCard() +
     '<div class="ver">Копилка · ' + (ONLINE ? 'данные синхронизируются с сервером' : 'данные хранятся на этом устройстве') + '</div>';
 }
 function currencyCard(){
@@ -1356,7 +1356,7 @@ function vSet(){
     '<label>Доход в месяц, '+SYM()+': от и до</label><div class="row2"><input class="f" id="s-inc" inputmode="decimal" value="'+S.defaultIncome+'" placeholder="от" style="flex:1"><input class="f" id="s-incmax" inputmode="decimal" value="'+(S.incomeMax > S.defaultIncome ? S.incomeMax : '')+'" placeholder="до" style="flex:1"></div>' +
     '<div class="hi" style="margin:.4rem .25rem 0;font-size:.8rem;font-weight:600">Бюджет считается по «от», чтобы хватало и в слабый месяц. «До» — необязательно.</div>' +
     '<button class="btn big" data-act="savesettings">Сохранить</button></div>' +
-    themeCard() + currencyCard() + remindCard() + exportCard() +
+    themeCard() + currencyCard() + familyCard() + remindCard() + exportCard() +
     '<div class="card"><button class="btn danger" data-act="reset">Сбросить все данные</button>' + (ONLINE ? '<button class="btn danger" style="margin-top:0.625rem" data-act="delaccount">Удалить мои данные с сервера</button>' : '') + '</div>';
 }
 
