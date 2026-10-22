@@ -1160,7 +1160,7 @@ function vDebt(){
     return '<button class="' + (k === DTAB ? 'on' : '') + '" data-act="dtab" data-v="' + k + '">' + names[k] + (by[k].length ? ' <i>' + by[k].length + '</i>' : '') + '</button>'; }).join('') + '</div>';
   var cur = by[DTAB], tot = sum(cur.map(debtLeft)), act = cur.filter(function(d){ return debtLeft(d) > 0; });
   var lbl, m1, m2;
-  if (DTAB === 'done') { lbl = 'Закрыто долгов'; m1 = ['Кредитов', cur.filter(function(d){ return d.kind !== 'owed'; }).length]; m2 = ['Мне вернули', fmt(sum(cur.filter(function(d){ return d.kind === 'owed'; }).map(function(d){ return d.total; })))]; tot = cur.length; }
+  if (DTAB === 'done') { lbl = 'Закрыто долгов'; m1 = ['Выплачено по кредитам', fmt(sum(cur.filter(function(d){ return d.kind !== 'owed'; }).map(function(d){ return d.total; })))]; m2 = ['Вернули вам', fmt(sum(cur.filter(function(d){ return d.kind === 'owed'; }).map(function(d){ return d.total; })))]; tot = cur.length; }
   else if (DTAB === 'loan') { lbl = 'Осталось выплатить'; m1 = ['В месяц', fmt(sum(act.map(function(d){ return d.pay || 0; })))]; m2 = ['Кредитов', act.length]; }
   else { lbl = DTAB === 'owed' ? 'Мне должны' : 'Я должен'; m1 = [DTAB === 'owed' ? 'Должников' : 'Кому', act.length]; m2 = ['Просрочено', act.filter(dOver).length]; }
   if (cur.length) h += '<div class="bal"><div class="lbl">' + lbl + '</div><div class="big">' + (DTAB === 'done' ? tot : fmt(tot)) + '</div><div class="row"><div class="mini"><span>' + m1[0] + '</span><b>' + m1[1] + '</b></div><div class="mini"><span>' + m2[0] + '</span><b>' + m2[1] + '</b></div></div></div>';
