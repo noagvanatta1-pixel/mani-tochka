@@ -1245,15 +1245,15 @@ function dLabels(k){
          k === 'owed' ? {n: 'Кто должен', ph: 'Имя, например Саша', a: 'Сколько одолжили'} : {n: 'Кому должен', ph: 'Имя, например Саша', a: 'Сколько занял'};
 }
 function openDebt(id, kind){
-  var d = id ? S.debts.filter(function(x){ return x.id === id; })[0] : null; dId = d ? d.id : null; dKind = d ? (d.kind === 'owe' ? 'loan' : d.kind) : (kind || 'loan'); dLend = true;
+  var d = id ? S.debts.filter(function(x){ return x.id === id; })[0] : null; dId = d ? d.id : null; dKind = d ? (d.kind === 'owed' ? 'owed' : 'loan') : (kind || 'loan'); dLend = true;
   var L = dLabels(dKind), loan = dKind === 'loan';
   sheet('<h3>' + (d ? 'Изменить' : (loan ? 'Новый кредит' : 'Новый долг')) + '</h3>' +
-    '<div class="seg" id="d-kind">' + [['loan', 'Кредит'], ['owed', 'Мне должны']].map(function(k){ return '<button class="' + (k[0] === dKind ? 'on' : '') + '" data-act="dkind" data-v="' + k[0] + '">' + k[1] + '</button>'; }).join('') + '</div>' +
+    (d ? '' : '<div class="seg" id="d-kind">' + [['loan', 'Кредит'], ['owed', 'Мне должны']].map(function(k){ return '<button class="' + (k[0] === dKind ? 'on' : '') + '" data-act="dkind" data-v="' + k[0] + '">' + k[1] + '</button>'; }).join('') + '</div>') +
     amtCard('d-total', L.a, d ? d.total : '', 'wallet') +
     '<label id="d-nl">' + L.n + '</label><input id="d-name" value="' + esc(d ? d.name : '') + '" placeholder="' + L.ph + '" autocomplete="off">' +
     '<div id="d-loan" style="display:' + (loan ? '' : 'none') + '">' +
       '<label>Платёж в месяц, ' + SYM() + '</label><input id="d-pay" inputmode="decimal" value="' + (d && d.pay ? d.pay : '') + '" placeholder="Необязательно" autocomplete="off">' +
-      '<label>Числа месяца (1–28)</label><input id="d-day" inputmode="numeric" value="' + (d ? (d.day || 1) : 1) + '" autocomplete="off">' +
+      '<label>День платежа каждый месяц (1–28)</label><input id="d-day" inputmode="numeric" value="' + (d ? (d.day || 1) : 1) + '" autocomplete="off">' +
       '<label>Ставка, % годовых</label><input id="d-rate" inputmode="decimal" value="' + (d && d.rate ? d.rate : '') + '" placeholder="Необязательно, для прогноза срока" autocomplete="off"></div>' +
     '<div id="d-pers" style="display:' + (loan ? 'none' : '') + '">' +
       '<label>Вернуть до (необязательно)</label><input class="f" id="d-due" type="date" value="' + (d && d.due ? d.due : '') + '">' +
