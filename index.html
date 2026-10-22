@@ -588,6 +588,12 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .gc .gleft{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
 .gc .gedit{display:inline-flex;align-items:center;gap:.375rem;padding:.4375rem .875rem;border-radius:1rem;background:hsla(var(--gh),90%,60%,.16);color:hsl(var(--gh),95%,78%);font-weight:700;font-size:.875rem;border:.0625rem solid hsla(var(--gh),90%,60%,.4)}
 .gc .ib.cam{bottom:auto;top:3.875rem}
+
+.card.cushion{border:.0625rem solid rgba(80,200,160,.4);background:linear-gradient(135deg,rgba(40,160,130,.16),transparent 70%),var(--card)}
+.cushion .cu-h{display:flex;gap:.75rem;align-items:center;margin-bottom:.75rem}
+.cushion .cu-i{flex:none;width:3rem;height:3rem;border-radius:.9rem;background:linear-gradient(135deg,#1fb98a,#0f8a8a);display:flex;align-items:center;justify-content:center;color:#fff}
+.cushion .cu-h b{display:block;font-size:1.1875rem;font-weight:800}
+.cushion .cu-h span:not(.cu-i){display:block;color:var(--muted);font-size:.9375rem;font-weight:600;margin-top:.125rem}
 </style>
 </head>
 <body>
@@ -1279,10 +1285,28 @@ function removeDebtPay(d, p){
   if (p.opId) S.ops = S.ops.filter(function(o){ return o.id !== p.opId; });
 }
 
+function avgSpend(){
+  var n = new Date(), vals = [];
+  for (var i = 0; i < 3; i++) { var d = new Date(n.getFullYear(), n.getMonth() - i, 1), v = spentOf(mk(d.getFullYear(), d.getMonth())); if (v > 0) vals.push(v); }
+  return vals.length ? Math.round(sum(vals) / vals.length / 1000) * 1000 || Math.round(sum(vals) / vals.length) : 0;
+}
+function cushionCard(){
+  if (S.goals.some(function(g){ return g.cushion; })) return '';
+  return '<div class="card cushion"><div class="cu-h"><span class="cu-i">' + ic('shield', 26) + '</span><div><b>Подушка безопасности</b><span>Запас на 3–6 месяцев жизни, если вдруг пропадёт доход</span></div></div>' +
+    '<button class="btn ghost" data-act="newcushion">Создать подушку</button></div>';
+}
+var cuM = 3;
+function openCushion(){
+  var avg = avgSpend(); cuM = 3;
+  sheet('<h3>Подушка безопасности</h3><div class="hi" style="margin:.1rem .25rem .6rem;font-weight:600">' + (avg ? 'Ваши расходы ≈ ' + fmt(avg) + ' в месяц' : 'Пока мало данных о расходах, введите сумму сами') + '</div>' +
+    '<label>На сколько месяцев жизни</label><div class="chips" id="cu-ch">' + [3, 6, 12].map(function(m){ return '<button class="chip ' + (m === 3 ? 'on' : '') + '" data-act="cumon" data-v="' + m + '">' + m + ' мес</button>'; }).join('') + '</div>' +
+    amtCard('cu-target', 'Сколько нужно накопить', avg ? avg * 3 : '', 'target') +
+    '<button class="btn big" data-act="savecushion">Создать</button>');
+}
 function vGoals(){
   var h = '<div class="top"><div><div class="title">Мои цели</div><div class="hi" style="margin-top:0.25rem">Выберите основную — она будет на главной</div></div></div>';
   var list = S.goals.slice().sort(function(a,b){ return (b.id === S.mainGoal) - (a.id === S.mainGoal); });
-  h += goalsSummary();
+  h += goalsSummary() + cushionCard();
   h += list.length ? list.map(function(g){ return goalCard(g, true); }).join('') : '<div class="card empty">Целей пока нет</div>';
   return h + '<button class="btn ghost" data-act="newgoal">'+ic('plus',22)+' Новая цель</button>';
 }
@@ -1836,6 +1860,17 @@ var ACT = {
   newcatm: function(){ backToCats = true; openCat(); },
   opnewcat: function(){ var a = $('#f-amt'), n = $('#f-note'); opDraft = {amt: a ? a.value : '', note: n ? n.value : ''}; backToOp = true; openCat(); },
   editcat: function(d){ commitPlan(); backToPlan = true; openCat(d.id); },
+  newcushion: function(){ if (S.goals.length >= 1 && gate('Несколько целей')) return; openCushion(); },
+  cumon: function(d, el){
+    cuM = Number(d.v); document.querySelectorAll('#cu-ch .chip').forEach(function(b){ b.classList.toggle('on', b === el); });
+    var a = avgSpend(); if (a) { $('#cu-target').value = String(a * cuM); fmtAllFields($('#sheet')); }
+  },
+  savecushion: function(){
+    var t = num($('#cu-target').value); if (t <= 0) { toast('Укажите сумму'); return; }
+    var n = {id: uid(), name: 'Подушка безопасности', target: t, img: '', contribs: [], cushion: true};
+    S.goals.push(n); if (!S.mainGoal) S.mainGoal = n.id;
+    save(); closeSheet(); render(); toast('Подушка создана');
+  },
   newgoal: function(){ if (S.goals.length >= 1 && gate('Несколько целей')) return; openGoal(); },
   editgoal: function(d){ openGoal(d.id); },
   contrib: function(d){ openContrib(d.id); },
