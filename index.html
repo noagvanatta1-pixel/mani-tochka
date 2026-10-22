@@ -594,6 +594,8 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .cushion .cu-i{flex:none;width:3rem;height:3rem;border-radius:.9rem;background:linear-gradient(135deg,#1fb98a,#0f8a8a);display:flex;align-items:center;justify-content:center;color:#fff}
 .cushion .cu-h b{display:block;font-size:1.1875rem;font-weight:800}
 .cushion .cu-h span:not(.cu-i){display:block;color:var(--muted);font-size:.9375rem;font-weight:600;margin-top:.125rem}
+
+.gc .ib{z-index:5}.gc .badge{z-index:5}.gc .gover{z-index:3;pointer-events:none}.gc .gover .gname{pointer-events:auto}
 </style>
 </head>
 <body>
@@ -1052,9 +1054,9 @@ function plan(g){
   var rest = g.target - saved(g);
   if (g.cushion) {   // подушка: откладываем не больше 10% дохода в месяц
     if (rest <= 0) return {done: true};
-    var ci = baseIncome(realKey()), cp = Math.min(rest, Math.ceil(ci * 0.1 / 100) * 100);
+    var cpc = g.pct || 10, ci = baseIncome(realKey()), cp = Math.min(rest, Math.ceil(ci * cpc / 10000) * 100);
     if (!(cp > 0)) return null;
-    var r0 = calcPlan(cp, 1, ci); r0.left = Math.ceil(rest / cp); r0.pct = true; return r0;
+    var r0 = calcPlan(cp, 1, ci); r0.left = Math.ceil(rest / cp); r0.pct = cpc; return r0;
   }
   if (!g.months) return null;
   if (rest <= 0) return {done: true};
@@ -1077,7 +1079,7 @@ function planLine(g){
   var p = plan(g);
   if (!p) return '<div class="gplan hint" data-act="editgoal" data-id="'+g.id+'">Укажите срок — подскажу, сколько откладывать в месяц</div>';
   if (p.done) return '<div class="gplan"><b>Цель достигнута 🎉</b></div>';
-  return '<div class="gplan '+(p.over ? 'neg' : '')+'" data-act="editgoal" data-id="'+g.id+'">Откладывать ≈ <b>'+fmt(p.per)+'</b>/мес'+(p.pct ? ' (10% дохода)' : '')+' · ещё '+p.left+' '+plural(p.left, ['месяц','месяца','месяцев']) +
+  return '<div class="gplan '+(p.over ? 'neg' : '')+'" data-act="editgoal" data-id="'+g.id+'">Откладывать ≈ <b>'+fmt(p.per)+'</b>/мес'+(p.pct ? ' (' + p.pct + '% дохода)' : '')+' · ещё '+p.left+' '+plural(p.left, ['месяц','месяца','месяцев']) +
     '<small>'+(p.over ? 'Больше зарплаты ('+fmt(p.inc)+') — увеличьте срок' : 'На жизнь останется ≈ '+fmt(p.free)+'/мес при зарплате '+fmt(p.inc))+'</small></div>';
 }
 function goalsSummary(){
@@ -1309,13 +1311,22 @@ function cushionCard(){
   return '<div class="card cushion"><div class="cu-h"><span class="cu-i">' + ic('shield', 26) + '</span><div><b>Подушка безопасности</b><span>Запас на 3–6 месяцев жизни, если вдруг пропадёт доход</span></div></div>' +
     '<button class="btn ghost" data-act="newcushion">Создать подушку</button></div>';
 }
-var cuM = 3;
-function openCushion(){
-  var est = avgSpend(), avg = est.v; cuM = 3;
+var cuM = 3, cuP = 10, cuId = null;
+function cuChips(id, arr, cur, act, suf){ return '<div class="chips" id="' + id + '">' + arr.map(function(m){ return '<button class="chip ' + (m === cur ? 'on' : '') + '" data-act="' + act + '" data-v="' + m + '">' + m + suf + '</button>'; }).join('') + '</div>'; }
+function openCushion(id){
+  var g = id ? goalById(id) : null, est = avgSpend(), avg = est.v; cuId = g ? g.id : null; cuM = g && g.cm ? g.cm : 3; cuP = g && g.pct ? g.pct : 10;
   sheet('<h3>Подушка безопасности</h3><div class="hi" style="margin:.1rem .25rem .6rem;font-weight:600">' + (avg ? 'Ваши расходы ≈ ' + fmt(avg) + ' в месяц (' + est.src + ')' : 'Пока нет данных о расходах и доходе, введите сумму сами') + '</div>' +
-    '<label>На сколько месяцев жизни</label><div class="chips" id="cu-ch">' + [3, 6, 12].map(function(m){ return '<button class="chip ' + (m === 3 ? 'on' : '') + '" data-act="cumon" data-v="' + m + '">' + m + ' мес</button>'; }).join('') + '</div>' +
-    amtCard('cu-target', 'Сколько нужно накопить', avg ? avg * 3 : '', 'target') +
-    '<button class="btn big" data-act="savecushion">Создать</button>');
+    '<label>На сколько месяцев жизни</label>' + cuChips('cu-ch', [3, 6, 12], cuM, 'cumon', ' мес') +
+    amtCard('cu-target', 'Сколько нужно накопить', g ? g.target : (avg ? avg * cuM : ''), 'target') +
+    '<label>Сколько откладывать в месяц</label>' + cuChips('cu-pc', [10, 25, 50], cuP, 'cupct', '% дохода') +
+    '<div class="hi" id="cu-hint" style="margin:.4rem .25rem 0"></div>' +
+    '<button class="btn big" data-act="savecushion">' + (g ? 'Сохранить' : 'Создать') + '</button>');
+  cuHint();
+}
+function cuHint(){
+  var el = $('#cu-hint'); if (!el) return;
+  var inc = baseIncome(realKey()), per = Math.ceil(inc * cuP / 10000) * 100, t = num($('#cu-target').value);
+  el.textContent = per > 0 ? 'Это ≈ ' + fmt(per) + ' в месяц' + (t > 0 ? ', накопите примерно за ' + Math.ceil(t / per) + ' ' + plural(Math.ceil(t / per), ['месяц', 'месяца', 'месяцев']) : '') : 'Укажите доход в настройках, и я посчитаю сумму в месяц';
 }
 function vGoals(){
   var h = '<div class="top"><div><div class="title">Мои цели</div><div class="hi" style="margin-top:0.25rem">Выберите основную — она будет на главной</div></div></div>';
@@ -1878,15 +1889,20 @@ var ACT = {
   cumon: function(d, el){
     cuM = Number(d.v); document.querySelectorAll('#cu-ch .chip').forEach(function(b){ b.classList.toggle('on', b === el); });
     var a = avgSpend().v; if (a) { $('#cu-target').value = String(a * cuM); fmtAllFields($('#sheet')); }
+    cuHint();
+  },
+  cupct: function(d, el){
+    cuP = Number(d.v); document.querySelectorAll('#cu-pc .chip').forEach(function(b){ b.classList.toggle('on', b === el); }); cuHint();
   },
   savecushion: function(){
     var t = num($('#cu-target').value); if (t <= 0) { toast('Укажите сумму'); return; }
-    var n = {id: uid(), name: 'Подушка безопасности', target: t, img: '', contribs: [], cushion: true};
-    S.goals.push(n); if (!S.mainGoal) S.mainGoal = n.id;
-    save(); closeSheet(); render(); toast('Подушка создана');
+    var g = cuId ? goalById(cuId) : null;
+    if (g) { g.target = t; g.cm = cuM; g.pct = cuP; }
+    else { var n = {id: uid(), name: 'Подушка безопасности', target: t, img: '', contribs: [], cushion: true, cm: cuM, pct: cuP}; S.goals.push(n); if (!S.mainGoal) S.mainGoal = n.id; }
+    save(); closeSheet(); render(); toast(g ? 'Сохранено' : 'Подушка создана');
   },
   newgoal: function(){ if (S.goals.length >= 1 && gate('Несколько целей')) return; openGoal(); },
-  editgoal: function(d){ openGoal(d.id); },
+  editgoal: function(d){ var g = goalById(d.id); if (g && g.cushion) openCushion(d.id); else openGoal(d.id); },
   contrib: function(d){ openContrib(d.id); },
   maingoal: function(d){ S.mainGoal = d.id; save(); haptic(); render(); },
   delgoal: function(d){
