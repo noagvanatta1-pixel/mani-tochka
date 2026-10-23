@@ -310,6 +310,14 @@ html[data-theme=pink] .wk .wedit,html[data-theme=mint] .wk .wedit,html[data-them
 .a2s{display:flex;align-items:center;gap:.8rem;padding:.7rem .25rem;font-weight:600}
 .a2s>i{flex:none;width:2.2rem;height:2.2rem;border-radius:.7rem;background:var(--pink-l);color:var(--pink-d);display:flex;align-items:center;justify-content:center;font-style:normal}
 .a2s em{display:block;font-style:normal;font-weight:500;font-size:.8125rem;color:var(--muted)}
+.a2c{position:relative;overflow:hidden;display:flex;align-items:center;gap:.85rem;margin:.75rem 0 .25rem;padding:1rem 2.6rem 1rem 1rem;border-radius:1.25rem;color:#fff;cursor:pointer;background:linear-gradient(135deg,var(--bal1),var(--bal2));box-shadow:0 .6rem 1.4rem -.5rem rgba(var(--sh),.55)}
+.a2c:before{content:"";position:absolute;right:-2rem;top:-2.5rem;width:9rem;height:9rem;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.28),rgba(255,255,255,0) 65%);pointer-events:none}
+.a2c img{flex:none;width:3.2rem;height:3.2rem;border-radius:.85rem;box-shadow:0 .25rem .7rem rgba(0,0,0,.3)}
+.a2c .t{position:relative;min-width:0;flex:1}
+.a2c .t b{display:block;font-size:1rem;line-height:1.2;font-weight:800}
+.a2c .t span{display:block;margin-top:.2rem;font-size:.8125rem;opacity:.85;line-height:1.3}
+.a2c .go{display:inline-block;margin-top:.55rem;background:#fff;color:var(--bal2);font-weight:800;font-size:.875rem;padding:.4rem 1rem;border-radius:99px}
+.a2c .x{position:absolute;right:.55rem;top:.55rem;width:1.7rem;height:1.7rem;border-radius:50%;border:0;background:rgba(255,255,255,.2);color:#fff;font-size:1.05rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .wq .x{margin-left:auto;flex:none;width:1.9rem;height:1.9rem;border-radius:50%;border:0;background:rgba(127,127,127,.16);color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .sumcard .srow{display:flex;justify-content:space-between;gap:1rem;padding:.55rem .25rem;border-bottom:1px solid var(--line);font-size:.95rem}
 .sumcard .srow:last-child{border-bottom:0}
@@ -1050,30 +1058,25 @@ function alertCard(k){
   if (!neg && over.length) return '<div class="safe bad"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>Лимит превышен: ' + over.join(', ') + '</b><span>Сегодня можно потратить ' + fmt(f.rest) + ' · ' + inf + '</span></div>' + x + '</div>';
   return '<div class="safe' + (neg ? ' bad' : '') + '"><span class="ci sm">' + ic('shield', 18) + '</span><div><b>' + (neg ? 'Сегодня сверх нормы: ' + fmt(-f.rest) : 'Безопасно потратить сегодня: ' + fmt(f.rest)) + '</b><span>' + inf + '</span>' + lim + '</div>' + x + '</div>';
 }
-/* ---------- Установка на экран «Домой» ---------- */
-var A2HS = null;   /* статус от Telegram: added | missed | unknown | unsupported */
+/* ---------- Установка на экран «Домой» (веб-версия из Safari) ---------- */
+var WEBURL = 'https://kopilka.website';
 function isStandalone(){ try { return window.navigator.standalone === true || !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches); } catch (e) { return false; } }
 function a2hsDis(){ try { return localStorage.getItem('kp_a2hs') === '1'; } catch (e) { return false; } }
 function isIOS(){ return /iPhone|iPad|iPod/.test(navigator.userAgent || ''); }
 function a2hsCard(){
-  if (a2hsDis() || isStandalone() || A2HS === 'added' || A2HS === 'unsupported') return '';
+  if (a2hsDis() || isStandalone()) return '';
   if (!IN_TG && !isIOS()) return '';
-  return '<div class="plan slim wq" data-act="a2hs">' + ic('plus', 20) + '<b>Добавьте Копилку на экран «Домой»</b><button class="x" data-act="a2hsdis" aria-label="Скрыть">×</button></div>';
+  return '<div class="a2c" data-act="a2hs"><img src="/pwa/icon-192.png" alt=""><div class="t"><b>Добавьте Копилку на экран «Домой»</b><span>Отдельная иконка рядом с другими приложениями</span><em class="go">Добавить</em></div><button class="x" data-act="a2hsdis" aria-label="Скрыть">×</button></div>';
 }
 function openA2hs(){
+  var share = '<div class="a2s"><i>' + ic('share', 20) + '</i><div>Нажмите «Поделиться» в нижней панели Safari</div></div>' +
+    '<div class="a2s"><i>' + ic('plus', 20) + '</i><div>Выберите «На экран «Домой»»<em>Если пункта не видно, пролистайте меню вниз</em></div></div>';
   var steps = IN_TG
-    ? '<div class="a2s"><i>' + ic('dots', 20) + '</i><div>Нажмите «⋯» вверху справа</div></div><div class="a2s"><i>' + ic('plus', 20) + '</i><div>Выберите «Добавить на экран «Домой»»</div></div>'
-    : '<div class="a2s"><i>' + ic('share', 20) + '</i><div>Нажмите «Поделиться» в нижней панели Safari</div></div><div class="a2s"><i>' + ic('plus', 20) + '</i><div>Выберите «На экран «Домой»»<em>Если пункта не видно, пролистайте меню вниз</em></div></div>';
+    ? '<div class="a2s"><i>' + ic('home', 20) + '</i><div>Откройте Копилку в Safari<em>Нажмите кнопку ниже</em></div></div>' + share
+    : share;
   sheet('<h3>Копилка на экране «Домой»</h3>' + steps +
-    '<div class="hi" style="margin:.4rem .25rem 0;font-weight:600">Иконка появится рядом с другими приложениями, открывать станет в один тап.</div>' +
-    (IN_TG && tg && tg.addToHomeScreen ? '<button class="btn big" data-act="a2hsgo">Добавить</button>' : ''));
-}
-function initA2hs(){
-  try {
-    if (!(IN_TG && tg)) return;
-    if (tg.checkHomeScreenStatus) tg.checkHomeScreenStatus(function(st){ A2HS = st; try { render(); } catch (e) {} });
-    if (tg.onEvent) tg.onEvent('homeScreenAdded', function(){ A2HS = 'added'; try { render(); } catch (e) {} });
-  } catch (e) {}
+    '<div class="hi" style="margin:.4rem .25rem 0;font-weight:600">Первый раз войдите через бота, и данные будут храниться на сервере.</div>' +
+    (IN_TG ? '<button class="btn big" data-act="a2hsweb">Открыть в Safari</button>' : ''));
 }
 function summaryBanner(){
   var n = new Date(); if (n.getDate() > 3 || !isCur()) return '';
@@ -2201,7 +2204,7 @@ var ACT = {
   },
   a2hs: function(){ openA2hs(); },
   a2hsdis: function(){ try { localStorage.setItem('kp_a2hs', '1'); } catch (e) {} render(); },
-  a2hsgo: function(){ closeSheet(); try { tg.addToHomeScreen(); } catch (e) {} },
+  a2hsweb: function(){ closeSheet(); try { if (tg && tg.openLink) { tg.openLink(WEBURL, {try_browser: 'safari'}); return; } } catch (e) {} try { window.open(WEBURL, '_blank'); } catch (e) {} },
   workdis: function(){ try { localStorage.setItem('kp_wkdis', '1'); } catch (e) {} render(); },
   wmode: function(d, el){
     workMode = d.v;
@@ -3057,7 +3060,6 @@ document.addEventListener('visibilitychange', function(){
 setInterval(function(){ if (ONLINE && !blocked && !document.hidden && scope === 'fam') pull('fam'); }, 20000);
 
 boot();
-initA2hs();
 })();
 </script>
 </body>
