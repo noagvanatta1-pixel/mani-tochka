@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="192x192" href="/pwa/icon-192.png">
-<link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/pwa/icon-192.png?v=2">
+<link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png?v=2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Копилка">
@@ -1066,7 +1066,7 @@ function isIOS(){ return /iPhone|iPad|iPod/.test(navigator.userAgent || ''); }
 function a2hsCard(){
   if (a2hsDis() || isStandalone()) return '';
   if (!IN_TG && !isIOS()) return '';
-  return '<div class="a2c" data-act="a2hs"><img src="/pwa/icon-192.png" alt=""><div class="t"><b>Добавьте Копилку на экран «Домой»</b><span>Отдельная иконка рядом с другими приложениями</span><em class="go">Добавить</em></div><button class="x" data-act="a2hsdis" aria-label="Скрыть">×</button></div>';
+  return '<div class="a2c" data-act="a2hs"><img src="/pwa/icon-192.png?v=2" alt=""><div class="t"><b>Добавьте Копилку на экран «Домой»</b><span>Отдельная иконка рядом с другими приложениями</span><em class="go">Добавить</em></div><button class="x" data-act="a2hsdis" aria-label="Скрыть">×</button></div>';
 }
 function openA2hs(){
   var share = '<div class="a2s"><i>' + ic('share', 20) + '</i><div>Нажмите «Поделиться» в нижней панели Safari</div></div>' +
