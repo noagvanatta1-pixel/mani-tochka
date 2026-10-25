@@ -1477,12 +1477,52 @@ function insights(k, sp, forecast){
   }
   return out;
 }
+var anP = 'month';
+function periodRange(p){
+  var to = today(); if (p === 'day') return [to, to];
+  var d = new Date(); d.setDate(d.getDate() - 6);
+  return [d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()), to];
+}
+function periodSeg(){
+  return '<div class="seg" style="margin:0 0 .9rem">' + [['day','День'],['week','Неделя'],['month','Месяц']].map(function(x){
+    return '<button class="' + (anP === x[0] ? 'on' : '') + '" data-act="anp" data-v="' + x[0] + '">' + x[1] + '</button>';
+  }).join('') + '</div>';
+}
+function vAnPeriod(){
+  var r = periodRange(anP), n = anP === 'day' ? 1 : 7;
+  var ops = S.ops.filter(function(o){ return o.date >= r[0] && o.date <= r[1]; });
+  var exp = ops.filter(function(o){ return o.type === 'expense'; }), inc = ops.filter(function(o){ return o.type === 'income'; });
+  var sp = sum(exp.map(function(o){ return o.amount; })), ic0 = sum(inc.map(function(o){ return o.amount; }));
+  var lbl = anP === 'day' ? 'Сегодня, ' + r[1].slice(8,10) + '.' + r[1].slice(5,7) : 'Последние 7 дней';
+  var h = '<div class="top"><div><div class="title">Аналитика</div><div class="hi">' + lbl + '</div></div></div>' + periodSeg();
+  h += '<div class="kpis"><div class="kpi"><span>Потрачено</span><b>' + fmt(sp) + '</b></div>' +
+    '<div class="kpi"><span>' + (anP === 'day' ? 'Операций' : 'В среднем в день') + '</span><b>' + (anP === 'day' ? exp.length : fmt(sp / n)) + '</b></div>' +
+    (ic0 > 0 ? '<div class="kpi w"><span>Доход за период</span><b>' + fmt(ic0) + '</b></div>' : '') + '</div>';
+  if (!exp.length) return h + '<div class="card empty">' + (anP === 'day' ? 'Сегодня трат пока нет' : 'За последние 7 дней трат нет') + '</div>';
+  var cats = {}, big = null, days = {};
+  exp.forEach(function(o){ cats[o.catId] = (cats[o.catId] || 0) + o.amount; days[o.date] = 1; if (!big || o.amount > big.amount) big = o; });
+  var top = Object.keys(cats).sort(function(a, b){ return cats[b] - cats[a]; })[0], tc = catById(top);
+  var rows = [];
+  if (tc) rows.push('<div class="srow"><span>Больше всего ушло на</span><b>' + esc(tc.name) + ' · ' + fmt(cats[top]) + '</b></div>');
+  if (big) rows.push('<div class="srow"><span>Самая крупная трата</span><b>' + fmt(big.amount) + (big.note ? ' · ' + esc(big.note) : '') + '</b></div>');
+  if (anP === 'week') rows.push('<div class="srow"><span>Дней без трат</span><b>' + (7 - Object.keys(days).length) + ' из 7</b></div>');
+  h += '<div class="sec"><h2>Итоги</h2></div><div class="card sumcard">' + rows.join('') + '</div>';
+  var cr = S.cats.map(function(c){ return {c: c, s: cats[c.id] || 0}; }).filter(function(x){ return x.s > 0; }).sort(function(a, b){ return b.s - a.s; });
+  h += '<div class="sec"><h2>Куда уходят деньги</h2></div><div class="card">' + cr.map(function(x){
+    var p = Math.round(x.s / sp * 100);
+    return '<div class="share"><div class="t"><span>' + ci(x.c.emoji, 'sm') + ' ' + esc(x.c.name) + '</span><span>' + fmt(x.s) + ' · ' + p + '%</span></div><div class="bar"><i style="width:' + p + '%"></i></div></div>';
+  }).join('') + '</div>';
+  var list = ops.slice().sort(function(a, b){ return a.date === b.date ? b.t - a.t : (a.date < b.date ? 1 : -1); }).slice(0, 30);
+  h += '<div class="sec"><h2>Операции</h2></div><div class="card">' + list.map(opRow).join('') + '<div class="empty" style="padding-bottom:0.25rem;font-size:0.8125rem">Нажмите на операцию, чтобы удалить</div></div>';
+  return h;
+}
 function vAn(){
+  if (anP !== 'month') return vAnPeriod();
   var k = curKey(), sp = spentOf(k), d = dim(), dl = daysLeft();
   var passed = dl != null ? d - dl + 1 : (isPast() ? d : 0);
   var avg = passed > 0 ? sp / passed : 0;
   var forecast = (dl != null && passed > 0) ? avg * d : null;
-  var h = '<div class="top"><div><div class="title">Аналитика</div><div class="hi" data-act="mpick">'+MONTHS[VM.m]+' '+VM.y+(monthKeys().length > 1 ? ' ▾' : '')+'</div></div>' + mnavHtml() + '</div>';
+  var h = '<div class="top"><div><div class="title">Аналитика</div><div class="hi" data-act="mpick">'+MONTHS[VM.m]+' '+VM.y+(monthKeys().length > 1 ? ' ▾' : '')+'</div></div>' + mnavHtml() + '</div>' + periodSeg();
   h += '<div class="kpis"><div class="kpi"><span>Потрачено</span><b>'+fmt(sp)+'</b></div><div class="kpi"><span>В среднем в день</span><b>'+fmt(avg)+'</b></div>' +
     '<div class="kpi w"><span>'+(forecast != null ? 'Прогноз трат до конца месяца' : 'Накоплено в целях за месяц')+'</span><b>'+fmt(forecast != null ? forecast : contribOf(k))+'</b></div></div>';
   var ins = insights(k, sp, forecast);
@@ -1942,6 +1982,7 @@ var ACT = {
       return '<button class="mrow' + (k === curKey() ? ' on' : '') + '" data-act="mgo" data-y="' + x.y + '" data-m="' + x.m + '"><span>' + MONTHS[x.m] + ' ' + x.y + '</span><b>' + fmt(spentOf(k)) + '</b></button>';
     }).join('') + '</div>');
   },
+  anp: function(d){ anP = d.v; render(); },
   mgo: function(d){ VM.y = +d.y; VM.m = +d.m; closeSheet(); render(); },
   addop: function(){ openOp(); },
   catadd: function(d){ openOp(d.id); },
