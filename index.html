@@ -287,6 +287,8 @@ body{font-weight:500}
 .cg[style*="--ch"] .ci{color:hsl(var(--ch) 80% 72%);background:hsl(var(--ch) 75% 55%/.28);border-radius:.625rem;box-shadow:0 0 12px hsl(var(--ch) 85% 60%/.38)}
 html[data-theme=pink] .cg[style*="--ch"] .ci,html[data-theme=mint] .cg[style*="--ch"] .ci,html[data-theme=lav] .cg[style*="--ch"] .ci,html[data-theme=sky] .cg[style*="--ch"] .ci{color:hsl(var(--ch) 65% 38%);box-shadow:none}
 .brow[style*="--ch"] .ci{color:hsl(var(--ch) 80% 72%);background:hsl(var(--ch) 75% 55%/.28);border-radius:.625rem;box-shadow:0 0 12px hsl(var(--ch) 85% 60%/.38)}
+.op[style*="--ch"] .ci,.share[style*="--ch"] .ci{color:hsl(var(--ch) 80% 72%);background:hsl(var(--ch) 75% 55%/.28);border-radius:.625rem;box-shadow:0 0 12px hsl(var(--ch) 85% 60%/.38)}
+html[data-theme=pink] .op[style*="--ch"] .ci,html[data-theme=mint] .op[style*="--ch"] .ci,html[data-theme=lav] .op[style*="--ch"] .ci,html[data-theme=sky] .op[style*="--ch"] .ci,html[data-theme=pink] .share[style*="--ch"] .ci,html[data-theme=mint] .share[style*="--ch"] .ci,html[data-theme=lav] .share[style*="--ch"] .ci,html[data-theme=sky] .share[style*="--ch"] .ci{color:hsl(var(--ch) 65% 38%);box-shadow:none}
 .brow[style*="--ch"] .bb i{background:linear-gradient(90deg,hsl(var(--ch) 75% 55%),hsl(var(--ch) 85% 70%));box-shadow:0 0 8px hsl(var(--ch) 85% 60%/.55)}
 html[data-theme=pink] .brow[style*="--ch"] .ci,html[data-theme=mint] .brow[style*="--ch"] .ci,html[data-theme=lav] .brow[style*="--ch"] .ci,html[data-theme=sky] .brow[style*="--ch"] .ci{color:hsl(var(--ch) 65% 38%);box-shadow:none}
 html[data-theme=pink] .brow[style*="--ch"] .bb i,html[data-theme=mint] .brow[style*="--ch"] .bb i,html[data-theme=lav] .brow[style*="--ch"] .bb i,html[data-theme=sky] .brow[style*="--ch"] .bb i{box-shadow:none}
@@ -1224,7 +1226,8 @@ function opRow(o){
     var c = catById(o.catId), em = ci(o.type === 'income' ? '💰' : (c ? c.emoji : '•'));
     var title = o.note || (o.type === 'income' ? 'Доход' : (c ? c.name : 'Без категории'));
     var d = o.date.slice(8,10) + '.' + o.date.slice(5,7);
-    return '<div class="op" data-act="delop" data-id="'+o.id+'"><div class="em">'+em+'</div><div class="m"><b>'+esc(title)+'</b><span>'+d+(o.note && c ? ' · '+esc(c.name) : '')+(o.fc ? ' · '+fmtc(o.fc.a, o.fc.c) : '')+authorTag(o)+'</span></div><div class="a '+(o.type === 'income' ? 'in' : '')+'">'+(o.type === 'income' ? '+' : '−')+fmt(o.amount)+'</div></div>';
+    var hue = o.type === 'income' ? 150 : (c ? (S.cats.indexOf(c) * 47 + 20) % 360 : null);
+    return '<div class="op"' + (hue != null ? ' style="--ch:' + hue + '"' : '') + ' data-act="delop" data-id="'+o.id+'"><div class="em">'+em+'</div><div class="m"><b>'+esc(title)+'</b><span>'+d+(o.note && c ? ' · '+esc(c.name) : '')+(o.fc ? ' · '+fmtc(o.fc.a, o.fc.c) : '')+authorTag(o)+'</span></div><div class="a '+(o.type === 'income' ? 'in' : '')+'">'+(o.type === 'income' ? '+' : '−')+fmt(o.amount)+'</div></div>';
 }
 function recentOps(k){
   var ops = opsOf(k).slice().sort(function(a,b){ return a.date === b.date ? b.t - a.t : (a.date < b.date ? 1 : -1); }).slice(0, 5);
@@ -1478,16 +1481,18 @@ function insights(k, sp, forecast){
   }
   return out;
 }
+function setOpDate(ds){ var f = $('#f-date'); if (f) f.value = ds; document.querySelectorAll('#sheet [data-act="opdate"]').forEach(function(b){ b.classList.remove('on'); }); }
 var WDS = ['вс','пн','вт','ср','чт','пт','сб'], MONG = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 function dateObj(ds){ return new Date(+ds.slice(0,4), +ds.slice(5,7) - 1, +ds.slice(8,10)); }
 function daysCard(dates){
   var by = {}; S.ops.forEach(function(o){ if (o.type === 'expense') by[o.date] = (by[o.date] || 0) + o.amount; });
   var mx = 1; dates.forEach(function(d){ if ((by[d] || 0) > mx) mx = by[d]; });
   var t = today();
-  return '<div class="sec"><h2>По дням</h2></div><div class="card">' + dates.map(function(d){
+  var shown = daysOpen ? dates : dates.slice(0, 3);
+  return '<div class="sec"><h2>По дням</h2></div><div class="card">' + shown.map(function(d){
     var v = by[d] || 0, o = dateObj(d), lbl = d === t ? 'сегодня' : (d === (function(){ var y = new Date(); y.setDate(y.getDate() - 1); return y.getFullYear() + '-' + pad(y.getMonth() + 1) + '-' + pad(y.getDate()); })() ? 'вчера' : WDS[o.getDay()]);
     return '<div class="drow' + (v ? '' : ' z') + '" data-act="dayview" data-d="' + d + '"><div class="dn">' + d.slice(8,10) + '.' + d.slice(5,7) + '<em>' + lbl + '</em></div><div class="db"><i style="width:' + Math.round(v / mx * 100) + '%"></i></div><div class="ds">' + (v ? fmt(v) : '—') + '</div></div>';
-  }).join('') + '<div class="empty" style="padding-bottom:0.25rem;font-size:0.8125rem">Нажмите на день, чтобы увидеть траты</div></div>';
+  }).join('') + (dates.length > 3 ? '<button class="btn ghost" style="margin:.6rem 0 0" data-act="daystoggle">' + (daysOpen ? 'Свернуть' : 'Показать все дни (' + dates.length + ')') + '</button>' : '') + '<div class="empty" style="padding-bottom:0.25rem;font-size:0.8125rem">Нажмите на день, чтобы увидеть траты и добавить пропущенную</div></div>';
 }
 function monthDates(k){
   var p = k.split('-'), y = +p[0], m = +p[1] - 1, last = new Date(y, m + 1, 0).getDate(), t = today(), out = [];
@@ -1528,7 +1533,7 @@ function vAnPeriod(){
   var cr = S.cats.map(function(c){ return {c: c, s: cats[c.id] || 0}; }).filter(function(x){ return x.s > 0; }).sort(function(a, b){ return b.s - a.s; });
   h += '<div class="sec"><h2>Куда уходят деньги</h2></div><div class="card">' + cr.map(function(x){
     var p = Math.round(x.s / sp * 100);
-    return '<div class="share"><div class="t"><span>' + ci(x.c.emoji, 'sm') + ' ' + esc(x.c.name) + '</span><span>' + fmt(x.s) + ' · ' + p + '%</span></div><div class="bar"><i style="width:' + p + '%"></i></div></div>';
+    return '<div class="share" style="--ch:' + ((S.cats.indexOf(x.c) * 47 + 20) % 360) + '"><div class="t"><span>' + ci(x.c.emoji, 'sm') + ' ' + esc(x.c.name) + '</span><span>' + fmt(x.s) + ' · ' + p + '%</span></div><div class="bar"><i style="width:' + p + '%"></i></div></div>';
   }).join('') + '</div>';
   var list = ops.slice().sort(function(a, b){ return a.date === b.date ? b.t - a.t : (a.date < b.date ? 1 : -1); }).slice(0, 30);
   h += '<div class="sec"><h2>Операции</h2></div><div class="card">' + list.map(opRow).join('') + '<div class="empty" style="padding-bottom:0.25rem;font-size:0.8125rem">Нажмите на операцию, чтобы удалить</div></div>';
@@ -1547,17 +1552,11 @@ function vAn(){
   if (ins.length) h += '<div class="sec"><h2>Подсказки</h2></div><div class="card tips">' + ins.map(function(x){ return '<div class="tip '+(x.warn ? 'warn' : '')+'"><span class="ci sm">'+ic(x.i,14)+'</span><span>'+esc(x.t)+'</span></div>'; }).join('') + '</div>';
   h += summaryCard(k);
   h += daysCard(monthDates(k));
-  var months = [], i;
-  for (i = 5; i >= 0; i--) { var dt = new Date(VM.y, VM.m - i, 1), key = mk(dt.getFullYear(), dt.getMonth()); months.push({l: MSHORT[dt.getMonth()], inc: incomeOf(key), sp: spentOf(key)}); }
-  var mx = Math.max(1, Math.max.apply(null, months.map(function(m){ return Math.max(m.inc, m.sp); })));
-  h += '<div class="sec"><h2>Доход и расходы</h2></div><div class="card"><div class="chart">' + months.map(function(m){
-    return '<div class="c"><div class="bars"><i class="a" style="height:'+(m.inc/mx*100)+'%"></i><i class="b" style="height:'+(m.sp/mx*100)+'%"></i></div><label>'+m.l+'</label></div>';
-  }).join('') + '</div><div class="legend"><span><i style="background:var(--pink-l)"></i>Доход</span><span><i style="background:var(--pink-d)"></i>Расходы</span></div></div>';
   var rows = S.cats.map(function(c){ return {c:c, s:sum(catOps(k,c.id).map(function(o){ return o.amount; }))}; }).filter(function(r){ return r.s > 0; }).sort(function(a,b){ return b.s - a.s; });
   h += '<div class="sec"><h2>Куда уходят деньги</h2></div><div class="card">';
   h += rows.length ? rows.map(function(r){
     var p = Math.round(r.s / sp * 100);
-    return '<div class="share"><div class="t"><span>'+ci(r.c.emoji,'sm')+' '+esc(r.c.name)+'</span><span>'+fmt(r.s)+' · '+p+'%</span></div><div class="bar"><i style="width:'+p+'%"></i></div></div>';
+    return '<div class="share" style="--ch:'+((S.cats.indexOf(r.c) * 47 + 20) % 360)+'"><div class="t"><span>'+ci(r.c.emoji,'sm')+' '+esc(r.c.name)+'</span><span>'+fmt(r.s)+' · '+p+'%</span></div><div class="bar"><i style="width:'+p+'%"></i></div></div>';
   }).join('') : '<div class="empty">Добавьте расходы, и здесь появится разбивка</div>';
   h += '</div>';
   h += opsCard(k);
@@ -1785,6 +1784,7 @@ function amtCard(id, label, val, icon, symId){
     '<div class="amtbox"><input id="' + id + '" inputmode="decimal" placeholder="0" autocomplete="off"' + (val ? ' value="' + val + '"' : '') + '></div></div>';
 }
 function openOp(catId, keepSwitch){
+  editOpId = null;
   opType = 'expense'; opCur = baseCode(); opCat = (catId && catById(catId)) ? catId : (S.cats[0] ? S.cats[0].id : '');
   var d = isCur() ? today() : mk(VM.y, VM.m) + '-01';
   var fromCat = !keepSwitch && !!(catId && catById(catId));   // открыли с карточки категории: это всегда расход, переключатель не нужен
@@ -1799,6 +1799,7 @@ function openOp(catId, keepSwitch){
   setTimeout(function(){ var a = $('#f-amt'); if (a) a.focus(); }, 320);
 }
 
+var editOpId = null, backDay = null, daysOpen = false;
 var backToPlan = false, backToCats = false, backToOp = false, opDraft = null, lastCatId = '';
 function openCats(){
   var h = '<h3>Категории</h3><div class="hi" style="margin:.2rem .25rem .6rem;font-weight:600">Нажмите на категорию, чтобы переименовать, поменять значок и лимит или удалить.</div>';
@@ -2002,16 +2003,28 @@ var ACT = {
     }).join('') + '</div>');
   },
   anp: function(d){ anP = d.v; render(); },
+  daystoggle: function(){ daysOpen = !daysOpen; render(); },
+  dayadd: function(d){ backDay = d.d; openOp(undefined, true); setOpDate(d.d); },
+  editop: function(d){
+    var o = S.ops.filter(function(x){ return x.id === d.id; })[0]; if (!o) return;
+    backDay = o.date; openOp(o.type === 'expense' ? o.catId : undefined, true); editOpId = o.id;
+    if (o.type === 'income') ACT.optype({v: 'income'}, document.querySelector('#sheet [data-act="optype"][data-v="income"]'));
+    var da = $('#f-amt'), dn = $('#f-note'); if (da) da.value = String(o.amount); if (dn) dn.value = o.note || '';
+    setOpDate(o.date); fmtAllFields($('#sheet'));
+    var h3 = document.querySelector('#sheet .hrow h3'); if (h3) h3.textContent = 'Изменить операцию';
+    var sb = document.querySelector('#sheet .sbody'); if (sb) sb.insertAdjacentHTML('beforeend', '<button class="btn danger" style="margin-top:.6rem" data-act="delop" data-id="' + o.id + '">Удалить операцию</button>');
+  },
   dayview: function(d){
     var ops = S.ops.filter(function(o){ return o.date === d.d; }).sort(function(a, b){ return b.t - a.t; });
     var sp = sum(ops.filter(function(o){ return o.type === 'expense'; }).map(function(o){ return o.amount; })), o = dateObj(d.d);
-    var ro = function(x){ return opRow(x).replace(' data-act="delop" data-id="' + x.id + '"', ''); };
+    var ro = function(x){ return opRow(x).replace('data-act="delop"', 'data-act="editop"'); };
     sheet('<h3>' + WDS[o.getDay()].charAt(0).toUpperCase() + WDS[o.getDay()].slice(1) + ', ' + o.getDate() + ' ' + MONG[o.getMonth()] + '</h3><div class="kpis"><div class="kpi w"><span>Потрачено за день</span><b>' + fmt(sp) + '</b></div></div>' +
-      (ops.length ? '<div class="card">' + ops.map(ro).join('') + '</div>' : '<div class="card empty">В этот день операций нет</div>'));
+      (ops.length ? '<div class="card">' + ops.map(ro).join('') + '<div class="empty" style="padding-bottom:0.25rem;font-size:0.8125rem">Нажмите на операцию, чтобы изменить или удалить</div></div>' : '<div class="card empty">В этот день операций нет</div>') +
+      '<button class="btn big" data-act="dayadd" data-d="' + d.d + '">Добавить трату за этот день</button>');
   },
   mgo: function(d){ VM.y = +d.y; VM.m = +d.m; closeSheet(); render(); },
-  addop: function(){ openOp(); },
-  catadd: function(d){ openOp(d.id); },
+  addop: function(){ backDay = null; openOp(); },
+  catadd: function(d){ backDay = null; openOp(d.id); },
   opensettings: function(){ TAB = 'set'; window.scrollTo(0, 0); render(); },
   backprof: function(){ TAB = 'prof'; window.scrollTo(0, 0); render(); },
   undo: function(){ var f = undoFn; hideUndo(); if (f) f(); },
@@ -2052,7 +2065,8 @@ var ACT = {
   },
   photo: function(d){ pendingGoal = d.id; $('#file').click(); },
   delop: function(d){
-    confirmBox('Удалить эту операцию?', function(){ var gone = S.ops.filter(function(o){ return o.id === d.id; })[0]; S.ops = S.ops.filter(function(o){ return o.id !== d.id; }); save(); render(); if (gone) showUndo('Операция удалена', function(){ S.ops.push(gone); save(); render(); toast('Возвращено'); }); });
+    confirmBox('Удалить эту операцию?', function(){ var gone = S.ops.filter(function(o){ return o.id === d.id; })[0]; S.ops = S.ops.filter(function(o){ return o.id !== d.id; }); save(); render(); if (backDay) { var bd = backDay; backDay = null; closeSheet(); setTimeout(function(){ ACT.dayview({d: bd}); }, 250); }
+      if (gone) showUndo('Операция удалена', function(){ S.ops.push(gone); save(); render(); toast('Возвращено'); }); });
   },
   optype: function(d, el){
     opType = d.v;
@@ -2101,11 +2115,15 @@ var ACT = {
       }
     }
     var nop = {id: uid(), type: opType, amount: a, catId: opType === 'expense' ? opCat : '', note: $('#f-note').value.trim(), date: date, t: Date.now(), by: tgUser ? tgUser.id : 0}; if (fc) nop.fc = fc;
-    S.ops.push(nop);
+    var editedOp = null;
+    if (editOpId) { editedOp = S.ops.filter(function(o){ return o.id === editOpId; })[0] || null; limitMsg = ''; }
+    if (editedOp) { editedOp.type = nop.type; editedOp.amount = nop.amount; editedOp.catId = nop.catId; editedOp.note = nop.note; editedOp.date = nop.date; delete editedOp.fc; if (nop.fc) editedOp.fc = nop.fc; nop = editedOp; } else S.ops.push(nop);
+    editOpId = null;
     save(); closeSheet(); haptic('medium');
     var ok = date.slice(0,7); var p = ok.split('-'); VM.y = +p[0]; VM.m = +p[1] - 1;
     render();
-    showUndo((limitMsg ? limitMsg + ' · ' : '') + (nop.type === 'expense' ? 'Расход добавлен' : 'Доход добавлен'), function(){ S.ops = S.ops.filter(function(o){ return o.id !== nop.id; }); save(); render(); toast('Отменено'); });
+    if (editedOp) toast('Операция изменена'); else showUndo((limitMsg ? limitMsg + ' · ' : '') + (nop.type === 'expense' ? 'Расход добавлен' : 'Доход добавлен'), function(){ S.ops = S.ops.filter(function(o){ return o.id !== nop.id; }); save(); render(); toast('Отменено'); });
+    if (backDay) { var bd = backDay; backDay = null; setTimeout(function(){ ACT.dayview({d: bd}); }, 250); }
   },
   saveplan: function(){
     S.income[curKey()] = num($('#p-inc').value);
