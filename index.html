@@ -142,6 +142,7 @@ h1,h2,h3,p{margin:0}
 .chart label{font-size:0.875rem;color:var(--muted);font-weight:700}
 .legend{display:flex;gap:1rem;margin:0.75rem 0.25rem 0;font-size:0.875rem;font-weight:600;color:var(--muted)}
 .legend i{display:inline-block;width:0.75rem;height:0.75rem;border-radius:0.25rem;margin-right:0.375rem;vertical-align:-1px}
+.drow{display:flex;align-items:center;gap:.7rem;padding:.6rem .25rem;border-bottom:1px solid var(--line);cursor:pointer;-webkit-tap-highlight-color:transparent}.drow:last-child{border-bottom:0}.drow .dn{width:5.4rem;flex:none;font-weight:700;font-size:.95rem}.drow .dn em{display:block;font-style:normal;font-weight:600;font-size:.74rem;color:var(--muted)}.drow .db{flex:1;height:.5rem;border-radius:.25rem;background:var(--pink-l);overflow:hidden}.drow .db i{display:block;height:100%;border-radius:.25rem;background:var(--bar1)}.drow .ds{width:5.8rem;flex:none;text-align:right;font-weight:800;font-size:.98rem}.drow.z .ds,.drow.z .dn{color:var(--muted);font-weight:600}
 .share{margin-bottom:0.875rem}.share .t{display:flex;justify-content:space-between;font-weight:700;margin-bottom:0.375rem;font-size:1.0625rem}
 .share .bar{margin:0}
 .set label,.panel label{display:block;margin:0.875rem 0.25rem 0.375rem;font-weight:700;color:var(--muted);font-size:0.9375rem}
@@ -1477,6 +1478,22 @@ function insights(k, sp, forecast){
   }
   return out;
 }
+var WDS = ['вс','пн','вт','ср','чт','пт','сб'], MONG = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+function dateObj(ds){ return new Date(+ds.slice(0,4), +ds.slice(5,7) - 1, +ds.slice(8,10)); }
+function daysCard(dates){
+  var by = {}; S.ops.forEach(function(o){ if (o.type === 'expense') by[o.date] = (by[o.date] || 0) + o.amount; });
+  var mx = 1; dates.forEach(function(d){ if ((by[d] || 0) > mx) mx = by[d]; });
+  var t = today();
+  return '<div class="sec"><h2>По дням</h2></div><div class="card">' + dates.map(function(d){
+    var v = by[d] || 0, o = dateObj(d), lbl = d === t ? 'сегодня' : (d === (function(){ var y = new Date(); y.setDate(y.getDate() - 1); return y.getFullYear() + '-' + pad(y.getMonth() + 1) + '-' + pad(y.getDate()); })() ? 'вчера' : WDS[o.getDay()]);
+    return '<div class="drow' + (v ? '' : ' z') + '" data-act="dayview" data-d="' + d + '"><div class="dn">' + d.slice(8,10) + '.' + d.slice(5,7) + '<em>' + lbl + '</em></div><div class="db"><i style="width:' + Math.round(v / mx * 100) + '%"></i></div><div class="ds">' + (v ? fmt(v) : '—') + '</div></div>';
+  }).join('') + '<div class="empty" style="padding-bottom:0.25rem;font-size:0.8125rem">Нажмите на день, чтобы увидеть траты</div></div>';
+}
+function monthDates(k){
+  var p = k.split('-'), y = +p[0], m = +p[1] - 1, last = new Date(y, m + 1, 0).getDate(), t = today(), out = [];
+  for (var d = last; d >= 1; d--) { var ds = y + '-' + pad(m + 1) + '-' + pad(d); if (ds <= t) out.push(ds); }
+  return out;
+}
 var anP = 'month';
 function periodRange(p){
   var to = today(); if (p === 'day') return [to, to];
@@ -1507,6 +1524,7 @@ function vAnPeriod(){
   if (big) rows.push('<div class="srow"><span>Самая крупная трата</span><b>' + fmt(big.amount) + (big.note ? ' · ' + esc(big.note) : '') + '</b></div>');
   if (anP === 'week') rows.push('<div class="srow"><span>Дней без трат</span><b>' + (7 - Object.keys(days).length) + ' из 7</b></div>');
   h += '<div class="sec"><h2>Итоги</h2></div><div class="card sumcard">' + rows.join('') + '</div>';
+  if (anP === 'week') { var wd = []; for (var q = 0; q < 7; q++) { var dd = new Date(); dd.setDate(dd.getDate() - q); wd.push(dd.getFullYear() + '-' + pad(dd.getMonth() + 1) + '-' + pad(dd.getDate())); } h += daysCard(wd); }
   var cr = S.cats.map(function(c){ return {c: c, s: cats[c.id] || 0}; }).filter(function(x){ return x.s > 0; }).sort(function(a, b){ return b.s - a.s; });
   h += '<div class="sec"><h2>Куда уходят деньги</h2></div><div class="card">' + cr.map(function(x){
     var p = Math.round(x.s / sp * 100);
@@ -1528,6 +1546,7 @@ function vAn(){
   var ins = insights(k, sp, forecast);
   if (ins.length) h += '<div class="sec"><h2>Подсказки</h2></div><div class="card tips">' + ins.map(function(x){ return '<div class="tip '+(x.warn ? 'warn' : '')+'"><span class="ci sm">'+ic(x.i,14)+'</span><span>'+esc(x.t)+'</span></div>'; }).join('') + '</div>';
   h += summaryCard(k);
+  h += daysCard(monthDates(k));
   var months = [], i;
   for (i = 5; i >= 0; i--) { var dt = new Date(VM.y, VM.m - i, 1), key = mk(dt.getFullYear(), dt.getMonth()); months.push({l: MSHORT[dt.getMonth()], inc: incomeOf(key), sp: spentOf(key)}); }
   var mx = Math.max(1, Math.max.apply(null, months.map(function(m){ return Math.max(m.inc, m.sp); })));
@@ -1983,6 +2002,13 @@ var ACT = {
     }).join('') + '</div>');
   },
   anp: function(d){ anP = d.v; render(); },
+  dayview: function(d){
+    var ops = S.ops.filter(function(o){ return o.date === d.d; }).sort(function(a, b){ return b.t - a.t; });
+    var sp = sum(ops.filter(function(o){ return o.type === 'expense'; }).map(function(o){ return o.amount; })), o = dateObj(d.d);
+    var ro = function(x){ return opRow(x).replace(' data-act="delop" data-id="' + x.id + '"', ''); };
+    sheet('<h3>' + WDS[o.getDay()].charAt(0).toUpperCase() + WDS[o.getDay()].slice(1) + ', ' + o.getDate() + ' ' + MONG[o.getMonth()] + '</h3><div class="kpis"><div class="kpi w"><span>Потрачено за день</span><b>' + fmt(sp) + '</b></div></div>' +
+      (ops.length ? '<div class="card">' + ops.map(ro).join('') + '</div>' : '<div class="card empty">В этот день операций нет</div>'));
+  },
   mgo: function(d){ VM.y = +d.y; VM.m = +d.m; closeSheet(); render(); },
   addop: function(){ openOp(); },
   catadd: function(d){ openOp(d.id); },
