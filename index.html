@@ -689,6 +689,7 @@ var PRESETS = [
 ];
 
 var I = {
+  check:'<rect x="4" y="4" width="16" height="16" rx="4.5"/><path d="M8.5 12.3l2.6 2.6 4.6-5.2"/>',
   share:'<path d="M12 15V4M8.5 7.5L12 4l3.5 3.5"/><path d="M7 11H6a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1h-1"/>',
   dots:'<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
   home:'<path d="M4 10.5L12 4l8 6.5V20H4z"/><path d="M9.5 20v-5.5h5V20"/>',
@@ -1227,21 +1228,18 @@ function homeTiles(){
 var PLPER = 'd', PLN = {d: 'День', m: 'Месяц', y: 'Год'};
 function planKey(per){ var t = today(); return per === 'd' ? t : per === 'm' ? t.slice(0, 7) : t.slice(0, 4); }
 function plansOf(per){ var k = planKey(per); return (S.plans || []).filter(function(p){ return p.per === per && p.key === k; }); }
-function plansRow(){
-  return '<div class="plrow">' + ['d', 'm', 'y'].map(function(per){
-    var l = plansOf(per), dn = l.filter(function(p){ return p.done; }).length;
-    return '<button data-act="plans" data-per="' + per + '"><b>' + PLN[per] + '</b><em>' + (l.length ? dn + ' из ' + l.length : 'Добавить план') + '</em></button>';
-  }).join('') + '</div>';
-}
-function openPlans(per){
-  PLPER = per || PLPER;
-  var l = plansOf(PLPER), sub = PLPER === 'd' ? 'на сегодня' : PLPER === 'm' ? 'на ' + MONTHS[new Date().getMonth()].toLowerCase() : 'на ' + new Date().getFullYear() + ' год';
-  sheet('<h3>Планы ' + sub + '</h3><div class="plseg">' + ['d', 'm', 'y'].map(function(p){ return '<button class="' + (p === PLPER ? 'on' : '') + '" data-act="plans" data-per="' + p + '">' + PLN[p] + '</button>'; }).join('') + '</div>' +
-    (l.length ? '<div class="card" style="box-shadow:none;padding:.2rem .8rem">' + l.map(function(p){
-      return '<div class="pli ' + (p.done ? 'done' : '') + '"><button class="pc" data-act="pldone" data-id="' + p.id + '" aria-label="Готово">' + (p.done ? ic('plus', 16).replace('M12 5v14M5 12h14', 'M5 12.5l4.5 4.5L19 7.5') : '') + '</button><span>' + esc(p.text) + '</span><button class="pd" data-act="pldel" data-id="' + p.id + '" aria-label="Удалить">' + ic('trash', 18) + '</button></div>'; }).join('') + '</div>'
-      : '<div class="hi" style="margin:0 .25rem .8rem;font-weight:600">Пока пусто. Запишите, что хотите успеть.</div>') +
-    '<label>Новый план</label><input id="pl-text" maxlength="120" placeholder="Например, оплатить интернет" autocomplete="off">' +
-    '<button class="btn big" data-act="pladd">' + ic('plus', 22) + ' Добавить</button>');
+function vPlans(){
+  var l = plansOf(PLPER), dn = l.filter(function(p){ return p.done; }).length;
+  var sub = PLPER === 'd' ? 'на сегодня' : PLPER === 'm' ? 'на ' + MONTHS[new Date().getMonth()].toLowerCase() : 'на ' + new Date().getFullYear() + ' год';
+  var h = '<div class="sec"><h2>Планы ' + sub + '</h2></div><div class="plseg">' + ['d', 'm', 'y'].map(function(p){
+    var n = plansOf(p).filter(function(x){ return !x.done; }).length;
+    return '<button class="' + (p === PLPER ? 'on' : '') + '" data-act="plans" data-per="' + p + '">' + PLN[p] + (n ? ' · ' + n : '') + '</button>'; }).join('') + '</div>';
+  h += l.length ? '<div class="card" style="padding:.2rem .9rem">' + l.map(function(p){
+    return '<div class="pli ' + (p.done ? 'done' : '') + '"><button class="pc" data-act="pldone" data-id="' + p.id + '" aria-label="Готово">' + (p.done ? ic('plus', 16).replace('M12 5v14M5 12h14', 'M5 12.5l4.5 4.5L19 7.5') : '') + '</button><span>' + esc(p.text) + '</span><button class="pd" data-act="pldel" data-id="' + p.id + '" aria-label="Удалить">' + ic('trash', 18) + '</button></div>'; }).join('') + '</div>' +
+    '<div class="hi" style="margin:.5rem .25rem 0;font-weight:600">Выполнено ' + dn + ' из ' + l.length + '</div>'
+    : '<div class="card empty">Пока пусто. Запишите, что хотите успеть.</div>';
+  return h + '<div class="set" style="margin-top:.6rem"><label>Новый план</label><input class="f" id="pl-text" maxlength="120" placeholder="Например, оплатить интернет" autocomplete="off">' +
+    '<button class="btn big" style="margin-top:.7rem" data-act="pladd">' + ic('plus', 22) + ' Добавить</button></div>';
 }
 function vHome(){
   var k = curKey(), h = webBar() + monthHeader(true) + trialBar();
@@ -1252,7 +1250,6 @@ function vHome(){
   if (g) h += goalMini(g);
   h += workCard();
   h += homeTiles();
-  h += plansRow();
   h += '<div class="sec"><h2>Категории</h2><button class="catedit" data-act="catmanage">' + ic('gear', 16) + ' Изменить</button></div>';
   h += S.cats.length ? '<div class="hgrid">' + S.cats.map(function(c){ return catCard(c, k); }).join('') + '</div>' : '<div class="card empty">Категорий пока нет. Откройте «Спланировать бюджет» и добавьте их.</div>';
   return h + recentOps(k);
@@ -1773,9 +1770,9 @@ function render(){
   applyTheme();
   try { snowSync(); } catch (e) {}
   try { garlandSync(); } catch (e) {}
-  var views = {home:vHome, goals:vGoals, debt:vDebt, an:vAn, set:vSet, prof:vProf};
+  var views = {plans:vPlans, home:vHome, goals:vGoals, debt:vDebt, an:vAn, set:vSet, prof:vProf};
   $('#app').innerHTML = views[TAB]();
-  var tabs = [['home','Главная','home'],['goals','Цели','target'],['debt','Долги','card'],['an','Аналитика','chart']];
+  var tabs = [['plans','Планы','check'],['home','Главная','home'],['goals','Цели','target'],['debt','Долги','card'],['an','Аналитика','chart']];
   $('#nav').innerHTML = tabs.map(function(t){ return '<button data-tab="'+t[0]+'" class="'+((t[0] === TAB || (t[0] === 'prof' && TAB === 'set')) ? 'on' : '')+'"><span class="i">'+ic(t[2],26)+'</span>'+t[1]+'</button>'; }).join('');
   $('#fab').style.display = TAB === 'home' ? 'flex' : 'none';
   fmtAllFields($('#app'));
@@ -2374,17 +2371,16 @@ var ACT = {
   refopen: function(){ REFOPEN = true; render(); },
   refclose: function(){ REFOPEN = false; render(); },
   recopen: function(){ openRecList(); },
-  plans: function(d){ openPlans(d.per); },
+  plans: function(d){ PLPER = d.per || PLPER; render(); },
   pladd: function(){
     var inp = $('#pl-text'), t = inp ? inp.value.trim() : '';
     if (!t) { toast('Введите план'); return; }
     if (!Array.isArray(S.plans)) S.plans = [];
     S.plans.push({id: uid(), text: t, per: PLPER, key: planKey(PLPER), done: false});
-    save(); render(); openPlans();
-    var n = $('#pl-text'); if (n) n.focus();
+    save(); render();
   },
-  pldone: function(d){ var p = (S.plans || []).filter(function(x){ return x.id === d.id; })[0]; if (!p) return; p.done = !p.done; haptic('light'); save(); render(); openPlans(); },
-  pldel: function(d){ S.plans = (S.plans || []).filter(function(x){ return x.id !== d.id; }); save(); render(); openPlans(); },
+  pldone: function(d){ var p = (S.plans || []).filter(function(x){ return x.id === d.id; })[0]; if (!p) return; p.done = !p.done; haptic('light'); save(); render(); },
+  pldel: function(d){ S.plans = (S.plans || []).filter(function(x){ return x.id !== d.id; }); save(); render(); },
   delrec: function(d){
     var r = S.recurring.filter(function(x){ return x.id === d.id; })[0]; if (!r) return;
     confirmBox('Удалить регулярный платёж «' + r.name + '»? Уже добавленные операции останутся.', function(){ S.recurring = S.recurring.filter(function(x){ return x.id !== d.id; }); save(); render(); if ($('#sheet.on')) openRecList(); });
@@ -2453,8 +2449,8 @@ document.addEventListener('input', function(e){
   else if (id === 'f-date') document.querySelectorAll('[data-act="opdate"]').forEach(function(b){ b.classList.remove('on'); });
 });
 document.addEventListener('keydown', function(e){
+  if (e.key === 'Enter' && e.target.id === 'pl-text') { e.preventDefault(); ACT.pladd(); var n = $('#pl-text'); if (n) n.focus(); return; }
   if (!$('#sheet').classList.contains('on')) return;
-  if (e.key === 'Enter' && e.target.id === 'pl-text') { e.preventDefault(); ACT.pladd(); return; }
   if (e.key === 'Escape') { closeSheet(); return; }
   if (e.key === 'Enter' && e.target.matches && e.target.matches('#sheet input')) {
     var b = $('#sheet .sfoot .btn'); if (b) { e.preventDefault(); b.click(); }
@@ -2508,15 +2504,15 @@ function curtainRun(oldG, opening){
   function fin(){ if (done) return; done = true; clearTimeout(tm); CURT = null; if (under.parentNode) under.remove(); if (top.parentNode) top.remove(); app.style.visibility = ''; }
   var tm = setTimeout(fin, 360); CURT = fin;
 }
-var TORDER = ['home', 'goals', 'debt', 'an'];
+var TORDER = ['plans', 'home', 'goals', 'debt', 'an'];
 function swipeDir(dx){
   var inP = TAB === 'prof' || TAB === 'set', i = TORDER.indexOf(TAB);
-  if (dx > 0) return inP ? null : (TAB === 'home' ? 'prof' : TORDER[i - 1] || null);
+  if (dx > 0) return inP ? null : (TAB === 'plans' ? 'prof' : TORDER[i - 1] || null);
   return inP ? 'home' : (TORDER[i + 1] || null);
 }
 /* шторка следует за пальцем */
 var DRAG = null;
-function viewHtml(t){ return ({home: vHome, goals: vGoals, debt: vDebt, an: vAn, set: vSet, prof: vProf})[t](); }
+function viewHtml(t){ return ({plans: vPlans, home: vHome, goals: vGoals, debt: vDebt, an: vAn, set: vSet, prof: vProf})[t](); }
 function mkLayer(html, y){
   var cs = getComputedStyle(document.body), g = document.createElement('div'), inner = document.createElement('div');
   g.className = 'curtain'; g.style.background = cs.backgroundColor; g.style.backgroundImage = cs.backgroundImage;
