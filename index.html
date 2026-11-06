@@ -1772,7 +1772,7 @@ function render(){
   try { garlandSync(); } catch (e) {}
   var views = {plans:vPlans, home:vHome, goals:vGoals, debt:vDebt, an:vAn, set:vSet, prof:vProf};
   $('#app').innerHTML = views[TAB]();
-  var tabs = [['plans','Планы','check'],['home','Главная','home'],['goals','Цели','target'],['debt','Долги','card'],['an','Аналитика','chart']];
+  var tabs = [['home','Главная','home'],['goals','Цели','target'],['debt','Долги','card'],['an','Аналитика','chart'],['plans','Планы','check']];
   $('#nav').innerHTML = tabs.map(function(t){ return '<button data-tab="'+t[0]+'" class="'+((t[0] === TAB || (t[0] === 'prof' && TAB === 'set')) ? 'on' : '')+'"><span class="i">'+ic(t[2],26)+'</span>'+t[1]+'</button>'; }).join('');
   $('#fab').style.display = TAB === 'home' ? 'flex' : 'none';
   fmtAllFields($('#app'));
@@ -2504,10 +2504,10 @@ function curtainRun(oldG, opening){
   function fin(){ if (done) return; done = true; clearTimeout(tm); CURT = null; if (under.parentNode) under.remove(); if (top.parentNode) top.remove(); app.style.visibility = ''; }
   var tm = setTimeout(fin, 360); CURT = fin;
 }
-var TORDER = ['plans', 'home', 'goals', 'debt', 'an'];
+var TORDER = ['home', 'goals', 'debt', 'an', 'plans'];
 function swipeDir(dx){
   var inP = TAB === 'prof' || TAB === 'set', i = TORDER.indexOf(TAB);
-  if (dx > 0) return inP ? null : (TAB === 'plans' ? 'prof' : TORDER[i - 1] || null);
+  if (dx > 0) return inP ? null : (TAB === 'home' ? 'prof' : TORDER[i - 1] || null);
   return inP ? 'home' : (TORDER[i + 1] || null);
 }
 /* шторка следует за пальцем */
