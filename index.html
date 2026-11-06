@@ -545,6 +545,21 @@ html[data-theme=ny] .fab svg{margin-top:.2rem;filter:none}
 .ht{display:flex;align-items:center;flex-wrap:wrap;gap:.1rem .6rem;padding:.8rem .9rem;border-radius:1.1rem;background:var(--pink-l);color:var(--ink);text-align:left}
 .ht .hi2{width:2.3rem;height:2.3rem;border-radius:.75rem;display:flex;align-items:center;justify-content:center;color:#fff;flex:none}
 .ht b{font-size:1rem;font-weight:800;flex:1;min-width:0}
+.plrow{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin:.6rem 0 .25rem}
+.plrow button{display:flex;flex-direction:column;gap:.2rem;padding:.7rem .8rem;border-radius:1.1rem;background:var(--pink-l);color:var(--ink);text-align:left}
+.plrow b{font-size:.95rem;font-weight:800}
+.plrow em{font-style:normal;font-size:.72rem;font-weight:600;color:var(--muted)}
+.plseg{display:grid;grid-template-columns:repeat(3,1fr);gap:.3rem;margin:.2rem 0 .7rem}
+.plseg button{padding:.6rem 0;border-radius:.8rem;font-weight:800;font-size:.9rem;background:var(--pink-l);color:var(--ink)}
+.plseg button.on{background:var(--pink-d);color:#fff}
+.pli{display:flex;align-items:center;gap:.6rem;padding:.55rem .1rem;border-bottom:1px solid var(--line);font-weight:600}
+.pli:last-child{border-bottom:0}
+.pli .pc{flex:none;width:1.6rem;height:1.6rem;border-radius:50%;border:2px solid var(--pink-d);display:flex;align-items:center;justify-content:center;color:#fff}
+.pli.done .pc{background:var(--pink-d)}
+.pli.done span{text-decoration:line-through;color:var(--muted)}
+.pli span{flex:1;min-width:0;word-break:break-word}
+.pli .pd{flex:none;color:var(--muted);padding:.3rem}
+.nosel,.nosel *{user-select:none;-webkit-user-select:none;cursor:grabbing}
 .ht em{flex-basis:100%;font-style:normal;font-size:.75rem;font-weight:600;color:var(--muted);margin-top:.35rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .legal{display:flex;justify-content:center;gap:1.2rem;flex-wrap:wrap;margin:.7rem 0 .2rem}.legal a{font-size:.78rem;font-weight:600;color:var(--muted);text-decoration:underline;text-underline-offset:.15rem;cursor:pointer}
 
@@ -1208,6 +1223,26 @@ function homeTiles(){
   return '<div class="htiles"><button class="ht plan" data-act="plan"><span class="hi2" style="background:#e69a00">' + ic('calc', 22) + '</span><b>Бюджет</b><em>Спланировать</em></button>' +
     '<button class="ht rec" data-act="recopen"><span class="hi2" style="background:var(--green,#0f9d74)">' + ic('repeat', 22) + '</span><b>Регулярные</b><em>' + (rl.length ? rl.length + ' · ' + fmt(rsum) + ' в мес.' : 'Добавить платёж') + '</em></button></div>';
 }
+/* ---------- Планы: день, месяц, год ---------- */
+var PLPER = 'd', PLN = {d: 'День', m: 'Месяц', y: 'Год'};
+function planKey(per){ var t = today(); return per === 'd' ? t : per === 'm' ? t.slice(0, 7) : t.slice(0, 4); }
+function plansOf(per){ var k = planKey(per); return (S.plans || []).filter(function(p){ return p.per === per && p.key === k; }); }
+function plansRow(){
+  return '<div class="plrow">' + ['d', 'm', 'y'].map(function(per){
+    var l = plansOf(per), dn = l.filter(function(p){ return p.done; }).length;
+    return '<button data-act="plans" data-per="' + per + '"><b>' + PLN[per] + '</b><em>' + (l.length ? dn + ' из ' + l.length : 'Добавить план') + '</em></button>';
+  }).join('') + '</div>';
+}
+function openPlans(per){
+  PLPER = per || PLPER;
+  var l = plansOf(PLPER), sub = PLPER === 'd' ? 'на сегодня' : PLPER === 'm' ? 'на ' + MONTHS[new Date().getMonth()].toLowerCase() : 'на ' + new Date().getFullYear() + ' год';
+  sheet('<h3>Планы ' + sub + '</h3><div class="plseg">' + ['d', 'm', 'y'].map(function(p){ return '<button class="' + (p === PLPER ? 'on' : '') + '" data-act="plans" data-per="' + p + '">' + PLN[p] + '</button>'; }).join('') + '</div>' +
+    (l.length ? '<div class="card" style="box-shadow:none;padding:.2rem .8rem">' + l.map(function(p){
+      return '<div class="pli ' + (p.done ? 'done' : '') + '"><button class="pc" data-act="pldone" data-id="' + p.id + '" aria-label="Готово">' + (p.done ? ic('plus', 16).replace('M12 5v14M5 12h14', 'M5 12.5l4.5 4.5L19 7.5') : '') + '</button><span>' + esc(p.text) + '</span><button class="pd" data-act="pldel" data-id="' + p.id + '" aria-label="Удалить">' + ic('trash', 18) + '</button></div>'; }).join('') + '</div>'
+      : '<div class="hi" style="margin:0 .25rem .8rem;font-weight:600">Пока пусто. Запишите, что хотите успеть.</div>') +
+    '<label>Новый план</label><input id="pl-text" maxlength="120" placeholder="Например, оплатить интернет" autocomplete="off">' +
+    '<button class="btn big" data-act="pladd">' + ic('plus', 22) + ' Добавить</button>');
+}
 function vHome(){
   var k = curKey(), h = webBar() + monthHeader(true) + trialBar();
   var g = goalById(S.mainGoal) || S.goals[0];
@@ -1217,6 +1252,7 @@ function vHome(){
   if (g) h += goalMini(g);
   h += workCard();
   h += homeTiles();
+  h += plansRow();
   h += '<div class="sec"><h2>Категории</h2><button class="catedit" data-act="catmanage">' + ic('gear', 16) + ' Изменить</button></div>';
   h += S.cats.length ? '<div class="hgrid">' + S.cats.map(function(c){ return catCard(c, k); }).join('') + '</div>' : '<div class="card empty">Категорий пока нет. Откройте «Спланировать бюджет» и добавьте их.</div>';
   return h + recentOps(k);
@@ -2338,6 +2374,17 @@ var ACT = {
   refopen: function(){ REFOPEN = true; render(); },
   refclose: function(){ REFOPEN = false; render(); },
   recopen: function(){ openRecList(); },
+  plans: function(d){ openPlans(d.per); },
+  pladd: function(){
+    var inp = $('#pl-text'), t = inp ? inp.value.trim() : '';
+    if (!t) { toast('Введите план'); return; }
+    if (!Array.isArray(S.plans)) S.plans = [];
+    S.plans.push({id: uid(), text: t, per: PLPER, key: planKey(PLPER), done: false});
+    save(); render(); openPlans();
+    var n = $('#pl-text'); if (n) n.focus();
+  },
+  pldone: function(d){ var p = (S.plans || []).filter(function(x){ return x.id === d.id; })[0]; if (!p) return; p.done = !p.done; haptic('light'); save(); render(); openPlans(); },
+  pldel: function(d){ S.plans = (S.plans || []).filter(function(x){ return x.id !== d.id; }); save(); render(); openPlans(); },
   delrec: function(d){
     var r = S.recurring.filter(function(x){ return x.id === d.id; })[0]; if (!r) return;
     confirmBox('Удалить регулярный платёж «' + r.name + '»? Уже добавленные операции останутся.', function(){ S.recurring = S.recurring.filter(function(x){ return x.id !== d.id; }); save(); render(); if ($('#sheet.on')) openRecList(); });
@@ -2407,6 +2454,7 @@ document.addEventListener('input', function(e){
 });
 document.addEventListener('keydown', function(e){
   if (!$('#sheet').classList.contains('on')) return;
+  if (e.key === 'Enter' && e.target.id === 'pl-text') { e.preventDefault(); ACT.pladd(); return; }
   if (e.key === 'Escape') { closeSheet(); return; }
   if (e.key === 'Enter' && e.target.matches && e.target.matches('#sheet input')) {
     var b = $('#sheet .sfoot .btn'); if (b) { e.preventDefault(); b.click(); }
@@ -2549,6 +2597,35 @@ document.addEventListener('touchend', function(e){
   dragEnd(go > W * 0.3 || (go > 30 && DRAG.sgn * s0.v > 0.4));
 }, {passive: true});
 document.addEventListener('touchcancel', function(){ sw = null; if (DRAG) dragEnd(false); }, {passive: true});
+
+/* то же самое мышью (ПК): зажать левую кнопку и вести вправо/влево */
+var msw = null, noClick = 0;
+document.addEventListener('mousedown', function(e){
+  var t = e.target;
+  if (e.button !== 0 || DRAG || GATE || (t.closest && t.closest('#sheet,input,textarea,select,.chips,.seg,canvas,a'))) { msw = null; return; }
+  msw = {x: e.clientX, y: e.clientY, on: false, lx: e.clientX, lt: Date.now(), v: 0};
+});
+document.addEventListener('mousemove', function(e){
+  if (!msw) return;
+  if (!(e.buttons & 1) || GATE || $('#sheet.on')) { if (msw.on && DRAG) dragEnd(false); msw = null; document.body.classList.remove('nosel'); return; }
+  var dx = e.clientX - msw.x, dy = e.clientY - msw.y;
+  if (!msw.on) {
+    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.5) { var dir = swipeDir(dx); if (!dir) { msw = null; return; } msw.on = true; document.body.classList.add('nosel'); dragStart(dir, dx > 0 ? 1 : -1); }
+    else return;
+  }
+  e.preventDefault();
+  var now = Date.now(); if (now > msw.lt) msw.v = (e.clientX - msw.lx) / (now - msw.lt); msw.lx = e.clientX; msw.lt = now;
+  dragMove(dx);
+});
+document.addEventListener('mouseup', function(e){
+  if (!msw) return;
+  var s0 = msw; msw = null; document.body.classList.remove('nosel');
+  if (!s0.on || !DRAG) return;
+  noClick = Date.now();
+  var dx = e.clientX - s0.x, W = DRAG.W, go = DRAG.sgn * dx;
+  dragEnd(go > W * 0.3 || (go > 30 && DRAG.sgn * s0.v > 0.4));
+});
+document.addEventListener('click', function(e){ if (noClick && Date.now() - noClick < 350) { e.stopPropagation(); e.preventDefault(); } noClick = 0; }, true);
 
 
 $('#file').addEventListener('change', function(e){
